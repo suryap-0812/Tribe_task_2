@@ -76,26 +76,43 @@ export default function PendingTasks() {
 
     // Filter tasks based on active filters
     const filteredTasks = tasks.filter(task => {
-        // Type filter
+        // 1. Status Check: Only show PENDING tasks (not completed)
+        if (task.completed) return false
+
+        // 2. Type filter
         if (filter.type === 'personal' && task.tribe && task.tribe !== 'Personal') return false
         if (filter.type === 'tribe' && (!task.tribe || task.tribe === 'Personal')) return false
 
-        // Priority filter
+        // 3. Priority filter
         if (filter.priority !== 'all-priorities' && task.priority !== filter.priority) return false
 
-        // Status filter (for the pending page, we only show non-completed tasks anyway)
+        // 4. Status Dropdown filter
         if (filter.status !== 'all-status' && task.status !== filter.status) return false
 
-        // Time filter (tab)
+        // 5. Time Tab filter
+        const taskDate = task.dueDate ? new Date(task.dueDate) : null
+        const today = new Date()
+        today.setHours(0, 0, 0, 0)
+
+        const endOfToday = new Date(today)
+        endOfToday.setHours(23, 59, 59, 999)
+
+        const endOfWeek = new Date(today)
+        endOfWeek.setDate(today.getDate() + 7)
+        endOfWeek.setHours(23, 59, 59, 999)
+
         if (activeTab === 'today') {
-            const today = new Date()
-            const taskDate = new Date(task.dueDate)
-            return taskDate.toDateString() === today.toDateString()
+            // Show overdue tasks + tasks due today
+            if (!taskDate) return false // No date -> Later
+            return taskDate <= endOfToday
         } else if (activeTab === 'week') {
-            const today = new Date()
-            const weekLater = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000)
-            const taskDate = new Date(task.dueDate)
-            return taskDate >= today && taskDate <= weekLater
+            // Show tasks due tomorrow -> end of week
+            if (!taskDate) return false
+            return taskDate > endOfToday && taskDate <= endOfWeek
+        } else if (activeTab === 'later') {
+            // Show tasks due after this week OR no due date
+            if (!taskDate) return true
+            return taskDate > endOfWeek
         }
 
         return true
@@ -272,7 +289,7 @@ export default function PendingTasks() {
                                                 )}
                                                 {task.tribe && (
                                                     <span className="text-xs text-gray-600">
-                                                        👥 {task.tribe}
+                                                        👥 {task.tribe.name || (typeof task.tribe === 'string' ? task.tribe : 'Tribe')}
                                                         {task.tribeRole && (
                                                             <span className="ml-1 text-gray-400">
                                                                 ({task.tribeRole})
@@ -287,10 +304,10 @@ export default function PendingTasks() {
                                                 )}
                                                 {task.assignedRole && task.assignedRole !== 'personal' && (
                                                     <span className={`text-xs px-2 py-0.5 rounded font-medium ${task.assignedRole === 'leader'
-                                                            ? 'bg-yellow-50 text-yellow-700'
-                                                            : task.assignedRole === 'delegate'
-                                                                ? 'bg-purple-50 text-purple-600'
-                                                                : 'bg-green-50 text-green-600'
+                                                        ? 'bg-yellow-50 text-yellow-700'
+                                                        : task.assignedRole === 'delegate'
+                                                            ? 'bg-purple-50 text-purple-600'
+                                                            : 'bg-green-50 text-green-600'
                                                         }`}>
                                                         {task.assignedRole.toUpperCase()}
                                                     </span>
