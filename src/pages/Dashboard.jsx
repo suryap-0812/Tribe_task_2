@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react'
-import { Calendar, Clock, CheckCircle2, Users, Star, Target, Plus } from 'lucide-react'
+import { useState, useEffect, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { Calendar, Clock, CheckCircle2, Users, Star, Target, Plus, ArrowRight } from 'lucide-react'
 import Card, { CardHeader, CardTitle, CardContent } from '../components/ui/Card'
 import Button from '../components/ui/Button'
 import Badge from '../components/ui/Badge'
@@ -9,66 +10,119 @@ import { useAuth } from '../context/AuthContext'
 import { statsAPI, tasksAPI } from '../services/api'
 import { formatTime } from '../utils/helpers'
 
+const UPCOMING_LIMIT = 5
+
 export default function Dashboard() {
     const { user } = useAuth()
-    const [tasks, setTasks] = useState([])
+    const navigate = useNavigate()
+    const [allTasks, setAllTasks] = useState([])
     const [stats, setStats] = useState(null)
     const [loading, setLoading] = useState(true)
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
-    const [completingTasks, setCompletingTasks] = useState(new Set())
+    // Track tasks being toggled (for optimistic UI)
+    const [togglingTasks, setTogglingTasks] = useState(new Set())
+    // Track upcoming tasks that have been completed (to remove from view instantly)
+    const [completedUpcoming, setCompletedUpcoming] = useState(new Set())
 
-    useEffect(() => {
-        loadDashboardData()
-    }, [])
-
-    const loadDashboardData = async () => {
+    const loadDashboardData = useCallback(async () => {
         try {
             setLoading(true)
-            const data = await statsAPI.getDashboardStats()
-            if (data) {
-                setStats(data)
-                setTasks(data.recentTasks || [])
-            } else {
-                throw new Error('No data received')
-            }
-        } catch (error) {
-            console.error('Failed to load dashboard data:', error)
-            // Set default empty stats so UI still renders
-            setStats({
+            // Fetch stats and ALL tasks in parallel
+            const [statsData, tasksData] = await Promise.all([
+                statsAPI.getDashboardStats(),
+                tasksAPI.getTasks(),
+            ])
+            setStats(statsData || {
                 dueToday: 0,
                 focusTime: 0,
                 tasksProgress: { completed: 0, total: 0 },
-                activeTribes: 0
+                activeTribes: 0,
             })
-            setTasks([])
+            setAllTasks(Array.isArray(tasksData) ? tasksData : [])
+        } catch (error) {
+            console.error('Failed to load dashboard data:', error)
+            setStats({ dueToday: 0, focusTime: 0, tasksProgress: { completed: 0, total: 0 }, activeTribes: 0 })
+            setAllTasks([])
         } finally {
             setLoading(false)
         }
+    }, [])
+
+    useEffect(() => {
+        loadDashboardData()
+    }, [loadDashboardData])
+
+    // Toggle a Today task — stays visible, just updates completed state
+    const handleTodayTaskToggle = async (taskId) => {
+        if (togglingTasks.has(taskId)) return
+
+        // Optimistic update
+        setTogglingTasks(prev => new Set(prev).add(taskId))
+        setAllTasks(prev =>
+            prev.map(t =>
+                (t._id || t.id) === taskId
+                    ? { ...t, completed: !t.completed, status: !t.completed ? 'completed' : 'pending' }
+                    : t
+            )
+        )
+
+        try {
+            await tasksAPI.completeTask(taskId)
+            // Refresh stats counter
+            const statsData = await statsAPI.getDashboardStats()
+            if (statsData) setStats(statsData)
+        } catch (error) {
+            console.error('Failed to toggle task:', error)
+            // Revert optimistic update on failure
+            setAllTasks(prev =>
+                prev.map(t =>
+                    (t._id || t.id) === taskId
+                        ? { ...t, completed: !t.completed, status: !t.completed ? 'completed' : 'pending' }
+                        : t
+                )
+            )
+        } finally {
+            setTogglingTasks(prev => {
+                const next = new Set(prev)
+                next.delete(taskId)
+                return next
+            })
+        }
     }
 
-    const handleTaskToggle = async (taskId) => {
-        // Add to completing set for animation
-        setCompletingTasks(prev => new Set(prev).add(taskId))
+    // Complete an Upcoming (starred) task — disappears from dashboard immediately
+    const handleUpcomingTaskComplete = async (taskId) => {
+        if (togglingTasks.has(taskId)) return
 
-        // Wait for animation to complete before API call
-        setTimeout(async () => {
-            try {
-                await tasksAPI.completeTask(taskId)
-                loadDashboardData() // Reload data
-            } catch (error) {
-                console.error('Failed to toggle task:', error)
-                // Remove from completing set if failed
-                setCompletingTasks(prev => {
-                    const newSet = new Set(prev)
-                    newSet.delete(taskId)
-                    return newSet
-                })
-            }
-        }, 300) // Match CSS transition duration
+        // Immediately hide from upcoming section
+        setCompletedUpcoming(prev => new Set(prev).add(taskId))
+        setTogglingTasks(prev => new Set(prev).add(taskId))
+
+        try {
+            await tasksAPI.completeTask(taskId)
+            // Remove from allTasks state and refresh stats
+            setAllTasks(prev => prev.filter(t => (t._id || t.id) !== taskId))
+            const statsData = await statsAPI.getDashboardStats()
+            if (statsData) setStats(statsData)
+        } catch (error) {
+            console.error('Failed to complete upcoming task:', error)
+            // Revert — show it again
+            setCompletedUpcoming(prev => {
+                const next = new Set(prev)
+                next.delete(taskId)
+                return next
+            })
+        } finally {
+            setTogglingTasks(prev => {
+                const next = new Set(prev)
+                next.delete(taskId)
+                return next
+            })
+        }
     }
 
     const handleCreateTask = () => {
-        loadDashboardData() // Reload after creating task
+        loadDashboardData()
         setIsCreateModalOpen(false)
     }
 
@@ -80,20 +134,31 @@ export default function Dashboard() {
         )
     }
 
-    const todayTasks = tasks.filter(task => {
+    // --- Today section: ALL tasks due today (including completed) ---
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const tomorrow = new Date(today)
+    tomorrow.setDate(tomorrow.getDate() + 1)
+
+    const todayTasks = allTasks.filter(task => {
         if (!task.dueDate) return false
-        const dueDate = new Date(task.dueDate)
-        const today = new Date()
-        return dueDate.toDateString() === today.toDateString()
+        const due = new Date(task.dueDate)
+        return due >= today && due < tomorrow
     })
 
-    const upcomingTasks = tasks.filter(task => {
-        if (!task.dueDate || task.completed) return false
-        const dueDate = new Date(task.dueDate)
-        const today = new Date()
-        const isUpcoming = dueDate > today && dueDate.toDateString() !== today.toDateString()
-        return isUpcoming && task.starred
+    // --- Upcoming section: starred, not completed, due in future, not already completed via dashboard ---
+    const allUpcomingStarred = allTasks.filter(task => {
+        const taskId = task._id || task.id
+        if (completedUpcoming.has(taskId)) return false
+        if (task.completed) return false
+        if (!task.starred) return false
+        if (!task.dueDate) return false
+        const due = new Date(task.dueDate)
+        return due >= tomorrow
     })
+
+    const visibleUpcoming = allUpcomingStarred.slice(0, UPCOMING_LIMIT)
+    const extraUpcomingCount = allUpcomingStarred.length - UPCOMING_LIMIT
 
     return (
         <div className="space-y-6">
@@ -166,50 +231,68 @@ export default function Dashboard() {
                         <CardHeader>
                             <div className="flex items-center justify-between">
                                 <CardTitle>My Tasks</CardTitle>
-                                <Button variant="ghost" size="sm" className="text-primary">
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="text-primary"
+                                    onClick={() => navigate('/pending-tasks')}
+                                >
                                     View all
                                 </Button>
                             </div>
                         </CardHeader>
                         <CardContent>
-                            {/* Today Section */}
+                            {/* ── TODAY SECTION ── */}
                             <div className="mb-6">
                                 <div className="flex items-center gap-2 mb-3">
                                     <span className="text-xs font-medium text-gray-500 uppercase">Today</span>
+                                    {todayTasks.length > 0 && (
+                                        <span className="text-xs text-gray-400">
+                                            ({todayTasks.filter(t => t.completed).length}/{todayTasks.length} done)
+                                        </span>
+                                    )}
                                 </div>
 
-                                <div className="space-y-3">
+                                <div className="space-y-2">
                                     {todayTasks.length === 0 ? (
-                                        <p className="text-sm text-gray-500 text-center py-4">No tasks due today</p>
+                                        <p className="text-sm text-gray-500 text-center py-4">No tasks due today 🎉</p>
                                     ) : (
-                                        todayTasks.map((task) => {
-                                            const taskId = task.id || task._id
+                                        todayTasks.map(task => {
+                                            const taskId = task._id || task.id
+                                            const isCompleted = task.completed
+                                            const isToggling = togglingTasks.has(taskId)
+
                                             return (
                                                 <div
                                                     key={taskId}
-                                                    className={`flex items-start gap-3 p-3 rounded-lg hover:bg-gray-50 transition-colors ${task.completed ? 'opacity-60' : ''
+                                                    className={`flex items-start gap-3 p-3 rounded-lg transition-colors ${isCompleted ? 'bg-gray-50' : 'hover:bg-gray-50'
                                                         }`}
                                                 >
                                                     <input
                                                         type="checkbox"
-                                                        checked={task.completed}
-                                                        onChange={() => handleTaskToggle(taskId)}
-                                                        className="mt-1 w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer"
+                                                        checked={isCompleted}
+                                                        disabled={isToggling}
+                                                        onChange={() => handleTodayTaskToggle(taskId)}
+                                                        className="mt-1 w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer disabled:cursor-wait"
                                                     />
                                                     <div className="flex-1 min-w-0">
-                                                        <p className={`text-sm font-medium ${task.completed ? 'line-through text-gray-400' : 'text-gray-900'
+                                                        <p className={`text-sm font-medium transition-all duration-200 ${isCompleted
+                                                                ? 'line-through text-gray-400'
+                                                                : 'text-gray-900'
                                                             }`}>
                                                             {task.title}
                                                         </p>
                                                         <div className="flex items-center gap-2 mt-1">
                                                             {task.tribe && (
-                                                                <span className={`text-xs ${task.completed ? 'text-gray-400' : 'text-gray-500'}`}>
+                                                                <span className={`text-xs ${isCompleted ? 'text-gray-400' : 'text-gray-500'}`}>
                                                                     👥 {task.tribe.name || task.tribe}
                                                                 </span>
                                                             )}
                                                         </div>
                                                     </div>
-                                                    <Badge variant={task.priority}>{task.priority}</Badge>
+                                                    <Badge variant={isCompleted ? 'default' : task.priority}>
+                                                        {task.priority}
+                                                    </Badge>
                                                 </div>
                                             )
                                         })
@@ -217,7 +300,7 @@ export default function Dashboard() {
                                 </div>
                             </div>
 
-                            {/* Upcoming Section - Starred Only */}
+                            {/* ── UPCOMING SECTION (starred only, max 5) ── */}
                             <div>
                                 <div className="flex items-center gap-2 mb-3">
                                     <span className="text-xs font-medium text-gray-500 uppercase">Upcoming</span>
@@ -225,47 +308,61 @@ export default function Dashboard() {
                                     <span className="text-xs text-gray-400">(Starred only)</span>
                                 </div>
 
-                                <div className="space-y-3">
-                                    {upcomingTasks.length === 0 ? (
+                                <div className="space-y-2">
+                                    {visibleUpcoming.length === 0 ? (
                                         <p className="text-sm text-gray-500 text-center py-4">No starred upcoming tasks</p>
                                     ) : (
-                                        upcomingTasks.map((task) => {
+                                        visibleUpcoming.map(task => {
                                             const taskId = task._id || task.id
-                                            const isCompleting = completingTasks.has(taskId)
+                                            const isRemoving = completedUpcoming.has(taskId)
+
                                             return (
                                                 <div
                                                     key={taskId}
-                                                    className={`flex items-start gap-3 p-3 rounded-lg hover:bg-gray-50 transition-all duration-300 ${isCompleting ? 'opacity-0 scale-95 h-0 py-0 mb-0 overflow-hidden' : 'opacity-100 scale-100'
+                                                    className={`flex items-start gap-3 p-3 rounded-lg hover:bg-gray-50 transition-all duration-300 ${isRemoving
+                                                            ? 'opacity-0 max-h-0 py-0 mb-0 overflow-hidden pointer-events-none'
+                                                            : 'opacity-100 max-h-40'
                                                         }`}
                                                 >
                                                     <input
                                                         type="checkbox"
-                                                        checked={isCompleting}
-                                                        onChange={() => handleTaskToggle(taskId)}
+                                                        checked={false}
+                                                        onChange={() => handleUpcomingTaskComplete(taskId)}
                                                         className="mt-1 w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer"
                                                     />
                                                     <div className="flex-1 min-w-0">
-                                                        <p className={`text-sm font-medium ${isCompleting ? 'line-through text-gray-400' : 'text-gray-900'
-                                                            }`}>
+                                                        <p className="text-sm font-medium text-gray-900">
                                                             {task.title}
                                                         </p>
                                                         <div className="flex items-center gap-2 mt-1">
                                                             {task.tribe && (
-                                                                <span className={`text-xs ${isCompleting ? 'text-gray-400' : 'text-gray-500'
-                                                                    }`}>
+                                                                <span className="text-xs text-gray-500">
                                                                     👥 {task.tribe.name || task.tribe}
                                                                 </span>
                                                             )}
-                                                            <span className={`text-xs ${isCompleting ? 'text-gray-400' : 'text-gray-500'
-                                                                }`}>
+                                                            <span className="text-xs text-gray-500">
                                                                 📅 {new Date(task.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                                                             </span>
                                                         </div>
                                                     </div>
-                                                    <Badge variant={task.priority}>{task.priority}</Badge>
+                                                    <div className="flex items-center gap-2">
+                                                        <Star className="w-3 h-3 text-yellow-500 fill-yellow-500 flex-shrink-0" />
+                                                        <Badge variant={task.priority}>{task.priority}</Badge>
+                                                    </div>
                                                 </div>
                                             )
                                         })
+                                    )}
+
+                                    {/* "See more" link when there are more than 5 starred upcoming tasks */}
+                                    {extraUpcomingCount > 0 && (
+                                        <button
+                                            onClick={() => navigate('/pending-tasks')}
+                                            className="w-full flex items-center justify-center gap-1 py-2 text-sm text-primary hover:text-primary/80 font-medium transition-colors"
+                                        >
+                                            See {extraUpcomingCount} more starred task{extraUpcomingCount > 1 ? 's' : ''}
+                                            <ArrowRight className="w-4 h-4" />
+                                        </button>
                                     )}
                                 </div>
                             </div>
