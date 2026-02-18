@@ -6,10 +6,11 @@ import Badge from '../components/ui/Badge'
 import CreateTribeModal from '../components/CreateTribeModal'
 import TribeDetails from '../components/TribeDetails'
 import MySpace from '../components/MySpace'
-import { tribesAPI } from '../services/api'
+import { tribesAPI, tasksAPI } from '../services/api'
 
 export default function MyTribes() {
     const [tribes, setTribes] = useState([])
+    const [stats, setStats] = useState({ personalTasks: 0, personalResources: 0, personalTribeId: null })
     const [loading, setLoading] = useState(true)
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
     const [selectedTribe, setSelectedTribe] = useState(null)
@@ -17,6 +18,7 @@ export default function MyTribes() {
 
     useEffect(() => {
         loadTribes()
+        loadStats()
     }, [])
 
     const loadTribes = async () => {
@@ -31,8 +33,52 @@ export default function MyTribes() {
         }
     }
 
+    const loadStats = async () => {
+        try {
+            const data = await tribesAPI.getTribes()
+            let personalTribe = data.find(t => t.name === 'Personal Space')
+
+            if (!personalTribe) {
+                // Background create
+                personalTribe = await tribesAPI.createTribe({
+                    name: 'Personal Space',
+                    description: 'Your personal workspace resources',
+                    color: 'indigo'
+                })
+                loadTribes() // refresh list
+            }
+
+            const tasks = await tasksAPI.getTasks({ status: 'pending' })
+            const personalTasks = tasks.filter(t => !t.tribe || (personalTribe && t.tribe === personalTribe._id)).length
+
+            setStats({
+                personalTasks,
+                personalResources: personalTribe.activeTasks || 0, // Abuse activeTasks for resource count in mock/display? No, use real later
+                personalTribeId: personalTribe._id || personalTribe.id
+            })
+        } catch (error) {
+            console.error('Failed to load stats:', error)
+        }
+    }
+
+    const handleJoinTribe = async () => {
+        const tribeId = prompt('Enter Tribe ID to join:')
+        if (tribeId) {
+            try {
+                setLoading(true)
+                await tribesAPI.joinTribe(tribeId)
+                alert('Successfully joined the tribe!')
+                loadTribes()
+            } catch (error) {
+                console.error('Failed to join tribe:', error)
+                alert(error.message || 'Failed to join tribe')
+            } finally {
+                setLoading(false)
+            }
+        }
+    }
+
     const handleCreateTribe = (newTribe) => {
-        // Reload tribes or add to state if API returns the created object
         loadTribes()
     }
 
@@ -43,6 +89,7 @@ export default function MyTribes() {
     const handleBackToTribes = () => {
         setSelectedTribe(null)
         setShowMySpace(false)
+        loadTribes() // Refresh in case of deletion/updates
     }
 
     const handleViewMySpace = () => {
@@ -60,7 +107,12 @@ export default function MyTribes() {
 
     // If My Space is selected, show the My Space view
     if (showMySpace) {
-        return <MySpace onBack={handleBackToTribes} />
+        return (
+            <MySpace
+                onBack={handleBackToTribes}
+                tribeId={stats.personalTribeId}
+            />
+        )
     }
 
     // If a tribe is selected, show the details view
@@ -76,8 +128,8 @@ export default function MyTribes() {
                     <p className="text-gray-600 mt-1">Collaborate and stay accountable with your tribes</p>
                 </div>
                 <div className="flex gap-3">
-                    <Button variant="outline">
-                        <Plus className="w-4 h-4 mr-2" />
+                    <Button variant="outline" onClick={handleJoinTribe}>
+                        <Users className="w-4 h-4 mr-2" />
                         Join a Tribe
                     </Button>
                     <Button onClick={() => setIsCreateModalOpen(true)}>
@@ -116,11 +168,11 @@ export default function MyTribes() {
                         <div className="grid grid-cols-2 gap-4 mb-4 pb-4 border-b border-primary-100">
                             <div>
                                 <p className="text-sm text-gray-600">My Tasks</p>
-                                <p className="text-lg font-semibold text-gray-900">24</p>
+                                <p className="text-lg font-semibold text-gray-900">{stats.personalTasks}</p>
                             </div>
                             <div>
                                 <p className="text-sm text-gray-600">Resources</p>
-                                <p className="text-lg font-semibold text-gray-900">12</p>
+                                <p className="text-lg font-semibold text-gray-900">{stats.personalResources}</p>
                             </div>
                         </div>
 

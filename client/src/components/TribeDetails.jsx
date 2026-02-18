@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ArrowLeft, Settings, MoreVertical, Shield, Clock, Users as UsersIcon, Trophy, BookOpen, Calendar, BarChart3 } from 'lucide-react'
+import { ArrowLeft, Settings, MoreVertical, Shield, Clock, Users as UsersIcon, Trophy, BookOpen, Calendar, BarChart3, Trash2 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import Card, { CardContent } from '../components/ui/Card'
 import Button from '../components/ui/Button'
@@ -14,64 +14,66 @@ import TribeAnalytics from './TribeAnalytics'
 import Achievements from './Achievements'
 import ResourceLibrary from './ResourceLibrary'
 
-export default function TribeDetails({ tribe, onBack }) {
+export default function TribeDetails({ tribe: initialTribe, onBack }) {
+    const [tribe, setTribe] = useState(initialTribe)
     const [activeTab, setActiveTab] = useState('overview')
+    const [loading, setLoading] = useState(false)
     const navigate = useNavigate()
 
-    // Mock data for demonstration
-    const currentUser = JSON.parse(localStorage.getItem('user') || '{"_id": "user-1", "name": "Current User", "avatar": "CU", "email": "user@example.com"}')
+    // Get current user from localStorage
+    const storedUser = localStorage.getItem('user')
+    const currentUser = storedUser ? JSON.parse(storedUser) : null
 
-    const tribeMembers = [
-        { _id: '1', name: 'Alex Chen', avatar: 'AC', email: 'alex@example.com', role: 'leader', status: 'online', tasksCompleted: 42, focusTime: 320, joinedAt: new Date(Date.now() - 30 * 86400000) },
-        { _id: '2', name: 'Sarah Johnson', avatar: 'SJ', email: 'sarah@example.com', role: 'member', status: 'online', tasksCompleted: 38, focusTime: 280, joinedAt: new Date(Date.now() - 25 * 86400000) },
-        { _id: '3', name: 'Michael Brown', avatar: 'MB', email: 'michael@example.com', role: 'member', status: 'away', tasksCompleted: 35, focusTime: 250, joinedAt: new Date(Date.now() - 20 * 86400000) },
-        { ...currentUser, role: 'member', status: 'online', tasksCompleted: 28, focusTime: 210, joinedAt: new Date(Date.now() - 15 * 86400000) },
-    ]
-
-    const chatMessages = [
-        { id: 1, sender: tribeMembers[0], content: 'Hey team! Ready for our standup?', timestamp: new Date(Date.now() - 3600000), reactions: [{ userId: '2', emoji: '👍', userName: 'Sarah' }] },
-        { id: 2, sender: tribeMembers[1], content: 'Yes! Just finished my morning tasks', timestamp: new Date(Date.now() - 3000000), reactions: [] },
-        { id: 3, sender: currentUser, content: '@Alex will share the design updates soon', timestamp: new Date(Date.now() - 1800000), reactions: [{ userId: '1', emoji: '🎉', userName: 'Alex' }] },
-    ]
-
-    const problems = [
-        {
-            id: 1,
-            title: 'Performance optimization for dashboard',
-            description: 'The dashboard is loading slowly with large datasets. Need to optimize queries and rendering.',
-            category: 'technical',
-            status: 'open',
-            creator: tribeMembers[0],
-            solutions: [],
-            createdAt: new Date(Date.now() - 86400000),
-            votes: 0
-        },
-        {
-            id: 2,
-            title: 'Design system inconsistencies',
-            description: 'Color palette and spacing need standardization across components.',
-            category: 'design',
-            status: 'discussing',
-            creator: tribeMembers[1],
-            solutions: [
-                {
-                    id: 1,
-                    author: tribeMembers[2],
-                    content: 'We could use CSS variables for consistent theming',
-                    votes: 3,
-                    timestamp: new Date(Date.now() - 43200000)
-                }
-            ],
-            createdAt: new Date(Date.now() - 172800000),
-            votes: 3
-        }
-    ]
+    // Map members to flat structure for child components
+    const tribeMembers = (tribe.members || []).map(m => ({
+        ...m.user,
+        role: m.role,
+        joinedAt: m.joinedAt,
+        // Mocking stats for now as they are not in the schema, but could be added later
+        tasksCompleted: Math.floor(Math.random() * 50),
+        focusTime: Math.floor(Math.random() * 500)
+    }))
 
     const handleBack = () => {
         if (onBack) {
             onBack()
         } else {
             navigate('/my-tribes')
+        }
+    }
+
+    const handleDeleteTribe = async () => {
+        if (window.confirm('Are you sure you want to delete this tribe? This action cannot be undone.')) {
+            try {
+                setLoading(true)
+                await tribesAPI.deleteTribe(tribe._id || tribe.id)
+                handleBack()
+            } catch (error) {
+                console.error('Failed to delete tribe:', error)
+                alert('Failed to delete tribe')
+            } finally {
+                setLoading(false)
+            }
+        }
+    }
+
+    const handleInviteMember = async (newMember) => {
+        try {
+            const updatedTribe = await tribesAPI.addMember(tribe._id || tribe.id, { email: newMember.email })
+            setTribe(updatedTribe)
+        } catch (error) {
+            console.error('Failed to invite member:', error)
+            alert(error.message || 'Failed to invite member')
+        }
+    }
+
+    const handleRemoveMember = async (userId) => {
+        try {
+            const updatedTribe = await tribesAPI.removeMember(tribe._id || tribe.id, userId)
+            setTribe(updatedTribe)
+        } catch (error) {
+            console.error('Failed to remove member:', error)
+            alert('Failed to remove member')
         }
     }
 
@@ -89,6 +91,16 @@ export default function TribeDetails({ tribe, onBack }) {
                     </button>
                 </div>
                 <div className="flex items-center gap-2">
+                    {/* Delete button only for Leader */}
+                    {tribeMembers.find(m => m._id === currentUser?._id)?.role === 'Leader' && (
+                        <button
+                            onClick={handleDeleteTribe}
+                            className="p-2 hover:bg-red-50 rounded-lg transition-colors text-red-500"
+                            title="Delete Tribe"
+                        >
+                            <Trash2 className="w-5 h-5" />
+                        </button>
+                    )}
                     <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
                         <Settings className="w-5 h-5 text-gray-600" />
                     </button>
@@ -286,26 +298,28 @@ export default function TribeDetails({ tribe, onBack }) {
                 {/* Chat Tab */}
                 <Tabs.Content value="chat" className="mt-6">
                     <TribeChat
-                        tribeId={tribe.id}
+                        tribeId={tribe._id || tribe.id}
                         currentUser={currentUser}
-                        messages={chatMessages}
+                        messages={[]} // Chat would be fetched by TribeChat component ideally
                     />
                 </Tabs.Content>
 
                 {/* Members Tab */}
                 <Tabs.Content value="members" className="mt-6">
                     <TribeMembers
-                        tribeId={tribe.id}
+                        tribeId={tribe._id || tribe.id}
                         members={tribeMembers}
                         currentUser={currentUser}
+                        onInvite={handleInviteMember}
+                        onRemove={handleRemoveMember}
                     />
                 </Tabs.Content>
 
                 {/* Problem Solving Tab */}
                 <Tabs.Content value="problem-solving" className="mt-6">
                     <ProblemSolvingBoard
-                        tribeId={tribe.id}
-                        problems={problems}
+                        tribeId={tribe._id || tribe.id}
+                        problems={[]} // Problems should be fetched by the component
                         currentUser={currentUser}
                     />
                 </Tabs.Content>

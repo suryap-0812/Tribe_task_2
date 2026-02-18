@@ -366,6 +366,49 @@ router.delete('/:id/members/:userId', async (req, res) => {
     }
 });
 
+// @route   POST /api/tribes/:id/join
+// @desc    Join a tribe
+// @access  Private
+router.post('/:id/join', async (req, res) => {
+    try {
+        const tribe = await Tribe.findById(req.params.id);
+
+        if (!tribe) {
+            return res.status(404).json({ message: 'Tribe not found' });
+        }
+
+        // Check if already a member
+        const alreadyMember = tribe.members.some(
+            (m) => m.user.toString() === req.user._id.toString()
+        );
+
+        if (alreadyMember) {
+            return res.status(400).json({ message: 'You are already a member of this tribe' });
+        }
+
+        // Add member
+        tribe.members.push({
+            user: req.user._id,
+            role: 'Member',
+        });
+
+        await tribe.save();
+
+        // Add tribe to user's tribes
+        await User.findByIdAndUpdate(req.user._id, {
+            $push: { tribes: tribe._id },
+        });
+
+        await tribe.populate('members.user', 'name email avatar');
+        await tribe.populate('createdBy', 'name email');
+
+        res.json(tribe);
+    } catch (error) {
+        console.error('Join tribe error:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+});
+
 // Import and use nested routes (converted to ES6)
 import messagesRouter from './messages.js';
 import problemsRouter from './problems.js';

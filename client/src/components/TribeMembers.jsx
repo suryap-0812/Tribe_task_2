@@ -4,13 +4,13 @@ import Card, { CardContent } from './ui/Card'
 import Button from './ui/Button'
 import Badge from './ui/Badge'
 
-export default function TribeMembers({ tribeId, members: initialMembers, currentUser, onInvite, onRemove }) {
-    const [members, setMembers] = useState(initialMembers || [])
+export default function TribeMembers({ tribeId, members, currentUser, onInvite, onRemove }) {
     const [viewMode, setViewMode] = useState('grid') // grid or list
     const [filterRole, setFilterRole] = useState('all')
     const [filterStatus, setFilterStatus] = useState('all')
     const [showInviteModal, setShowInviteModal] = useState(false)
     const [inviteEmail, setInviteEmail] = useState('')
+    const [isInviting, setIsInviting] = useState(false)
 
     const roles = ['all', 'leader', 'member', 'contributor']
     const statuses = ['all', 'online', 'away', 'offline']
@@ -47,34 +47,21 @@ export default function TribeMembers({ tribeId, members: initialMembers, current
         return roleMatch && statusMatch
     })
 
-    const handleInvite = () => {
-        if (inviteEmail.trim()) {
-            const newMember = {
-                _id: `member-${Date.now()}`,
-                name: inviteEmail.split('@')[0],
-                email: inviteEmail,
-                avatar: inviteEmail.substring(0, 2).toUpperCase(),
-                role: 'member',
-                status: 'offline',
-                joinedAt: new Date(),
-                tasksCompleted: 0,
-                focusTime: 0
-            }
-
-            setMembers([...members, newMember])
-            setInviteEmail('')
-            setShowInviteModal(false)
-
-            if (onInvite) {
-                onInvite(newMember)
+    const handleInvite = async () => {
+        if (inviteEmail.trim() && onInvite) {
+            try {
+                setIsInviting(true)
+                await onInvite({ email: inviteEmail })
+                setInviteEmail('')
+                setShowInviteModal(false)
+            } finally {
+                setIsInviting(false)
             }
         }
     }
 
     const handleRemoveMember = (memberId) => {
         if (window.confirm('Are you sure you want to remove this member?')) {
-            setMembers(members.filter(m => m._id !== memberId))
-
             if (onRemove) {
                 onRemove(memberId)
             }
@@ -108,8 +95,8 @@ export default function TribeMembers({ tribeId, members: initialMembers, current
                                 key={role}
                                 onClick={() => setFilterRole(role)}
                                 className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${filterRole === role
-                                        ? 'bg-primary text-white'
-                                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                    ? 'bg-primary text-white'
+                                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                                     }`}
                             >
                                 {role.charAt(0).toUpperCase() + role.slice(1)}
@@ -126,8 +113,8 @@ export default function TribeMembers({ tribeId, members: initialMembers, current
                                 key={status}
                                 onClick={() => setFilterStatus(status)}
                                 className={`px-3 py-1.5 text-sm rounded-lg transition-colors flex items-center gap-2 ${filterStatus === status
-                                        ? 'bg-primary text-white'
-                                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                    ? 'bg-primary text-white'
+                                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                                     }`}
                             >
                                 {status !== 'all' && (
@@ -318,8 +305,8 @@ export default function TribeMembers({ tribeId, members: initialMembers, current
                                     >
                                         Cancel
                                     </Button>
-                                    <Button onClick={handleInvite} disabled={!inviteEmail.trim()}>
-                                        Send Invite
+                                    <Button onClick={handleInvite} disabled={!inviteEmail.trim() || isInviting}>
+                                        {isInviting ? 'Inviting...' : 'Send Invite'}
                                     </Button>
                                 </div>
                             </div>

@@ -71,6 +71,7 @@ export const tribesAPI = {
     deleteTribe: (id) => api.delete(`/tribes/${id}`),
     addMember: (id, data) => api.post(`/tribes/${id}/members`, data),
     removeMember: (id, userId) => api.delete(`/tribes/${id}/members/${userId}`),
+    joinTribe: (id) => api.post(`/tribes/${id}/join`),
 
     // Messages
     getMessages: (tribeId, params) => api.get(`/tribes/${tribeId}/messages`, { params }),

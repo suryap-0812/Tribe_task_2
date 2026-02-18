@@ -1,44 +1,13 @@
-import { useState } from 'react'
-import { Upload, Search, Filter, FileText, Image, Link, Code, Download, Trash2 } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Upload, Search, Filter, FileText, Image, Link, Code, Download, Trash2, Loader2 } from 'lucide-react'
 import Card, { CardContent } from './ui/Card'
 import Button from './ui/Button'
 import Badge from './ui/Badge'
+import { tribesAPI } from '../services/api'
 
-export default function ResourceLibrary({ tribeId, resources: initialResources = [], currentUser, onUpload, onDelete }) {
-    const [resources, setResources] = useState(initialResources.length > 0 ? initialResources : [
-        {
-            id: 1,
-            name: 'Project Documentation',
-            type: 'document',
-            url: '#',
-            category: 'Docs',
-            description: 'Complete project setup and architecture guide',
-            uploader: { name: 'Alex Chen', avatar: 'AC' },
-            uploadDate: new Date(Date.now() - 2 * 86400000),
-            size: '2.4 MB'
-        },
-        {
-            id: 2,
-            name: 'Design System',
-            type: 'link',
-            url: 'https://example.com/design',
-            category: 'Design',
-            description: 'Figma link to our design system',
-            uploader: { name: 'Sarah Johnson', avatar: 'SJ' },
-            uploadDate: new Date(Date.now() - 5 * 86400000)
-        },
-        {
-            id: 3,
-            name: 'Code Style Guide',
-            type: 'code',
-            url: '#',
-            category: 'Code',
-            description: 'Coding standards and best practices',
-            uploader: { name: 'Michael Brown', avatar: 'MB' },
-            uploadDate: new Date(Date.now() - 1 * 86400000),
-            size: '156 KB'
-        }
-    ])
+export default function ResourceLibrary({ tribeId, currentUser }) {
+    const [resources, setResources] = useState([])
+    const [loading, setLoading] = useState(true)
     const [searchQuery, setSearchQuery] = useState('')
     const [filterType, setFilterType] = useState('all')
     const [showUploadModal, setShowUploadModal] = useState(false)
@@ -49,6 +18,24 @@ export default function ResourceLibrary({ tribeId, resources: initialResources =
         category: '',
         description: ''
     })
+
+    useEffect(() => {
+        if (tribeId) {
+            loadResources()
+        }
+    }, [tribeId])
+
+    const loadResources = async () => {
+        try {
+            setLoading(true)
+            const data = await tribesAPI.getResources(tribeId)
+            setResources(data.resources || [])
+        } catch (error) {
+            console.error('Failed to load resources:', error)
+        } finally {
+            setLoading(false)
+        }
+    }
 
     const resourceTypes = ['all', 'document', 'image', 'link', 'code']
 
@@ -86,37 +73,38 @@ export default function ResourceLibrary({ tribeId, resources: initialResources =
         const typeMatch = filterType === 'all' || resource.type === filterType
         const searchMatch = searchQuery === '' ||
             resource.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            resource.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            resource.category.toLowerCase().includes(searchQuery.toLowerCase())
+            (resource.description && resource.description.toLowerCase().includes(searchQuery.toLowerCase())) ||
+            (resource.category && resource.category.toLowerCase().includes(searchQuery.toLowerCase()))
         return typeMatch && searchMatch
     })
 
-    const handleUploadResource = () => {
+    const handleUploadResource = async () => {
         if (newResource.name.trim()) {
-            const resource = {
-                id: Date.now(),
-                ...newResource,
-                uploader: currentUser,
-                uploadDate: new Date(),
-                size: '1.2 MB'
-            }
+            try {
+                const response = await tribesAPI.uploadResource(tribeId, {
+                    ...newResource,
+                    uploader: currentUser._id,
+                    size: '1.2 MB' // This would ideally be calculated server-side or during file upload
+                })
 
-            setResources([resource, ...resources])
-            setNewResource({ name: '', type: 'document', url: '', category: '', description: '' })
-            setShowUploadModal(false)
-
-            if (onUpload) {
-                onUpload(resource)
+                setResources([response.resource, ...resources])
+                setNewResource({ name: '', type: 'document', url: '', category: '', description: '' })
+                setShowUploadModal(false)
+            } catch (error) {
+                console.error('Failed to upload resource:', error)
+                alert('Failed to upload resource')
             }
         }
     }
 
-    const handleDeleteResource = (resourceId) => {
+    const handleDeleteResource = async (resourceId) => {
         if (window.confirm('Delete this resource?')) {
-            setResources(resources.filter(r => r.id !== resourceId))
-
-            if (onDelete) {
-                onDelete(resourceId)
+            try {
+                await tribesAPI.deleteResource(tribeId, resourceId)
+                setResources(resources.filter(r => r._id !== resourceId && r.id !== resourceId))
+            } catch (error) {
+                console.error('Failed to delete resource:', error)
+                alert('Failed to delete resource')
             }
         }
     }
@@ -140,6 +128,7 @@ export default function ResourceLibrary({ tribeId, resources: initialResources =
 
             {/* Filters */}
             <div className="flex items-center gap-4 flex-wrap">
+
                 <div className="flex-1 relative">
                     <input
                         type="text"
@@ -158,8 +147,8 @@ export default function ResourceLibrary({ tribeId, resources: initialResources =
                                 key={type}
                                 onClick={() => setFilterType(type)}
                                 className={`px-3 py-2 text-sm rounded-lg transition-colors capitalize ${filterType === type
-                                        ? 'bg-primary text-white'
-                                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                    ? 'bg-primary text-white'
+                                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                                     }`}
                             >
                                 {type}
@@ -170,7 +159,11 @@ export default function ResourceLibrary({ tribeId, resources: initialResources =
             </div>
 
             {/* Resources Grid */}
-            {filteredResources.length === 0 ? (
+            {loading ? (
+                <div className="flex justify-center py-12">
+                    <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                </div>
+            ) : filteredResources.length === 0 ? (
                 <Card className="py-16">
                     <div className="text-center">
                         <div className="text-6xl mb-4">📚</div>
@@ -181,7 +174,7 @@ export default function ResourceLibrary({ tribeId, resources: initialResources =
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {filteredResources.map(resource => (
-                        <Card key={resource.id} className="hover:shadow-lg transition-shadow">
+                        <Card key={resource._id || resource.id} className="hover:shadow-lg transition-shadow">
                             <CardContent className="pt-6">
                                 <div className="space-y-4">
                                     {/* Header */}
@@ -218,9 +211,9 @@ export default function ResourceLibrary({ tribeId, resources: initialResources =
                                     <div className="pt-4 border-t border-gray-100 flex items-center justify-between">
                                         <div className="flex items-center gap-2 text-xs text-gray-500">
                                             <div className="w-6 h-6 bg-gradient-to-br from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white text-xs font-medium">
-                                                {resource.uploader.avatar}
+                                                {resource.uploader?.avatar || resource.uploader?.name?.[0] || 'U'}
                                             </div>
-                                            <span>{resource.uploadDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                                            <span>{new Date(resource.createdAt || resource.uploadDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
                                         </div>
                                         <div className="flex items-center gap-2">
                                             {resource.type === 'link' ? (
@@ -237,9 +230,9 @@ export default function ResourceLibrary({ tribeId, resources: initialResources =
                                                     <Download className="w-4 h-4" />
                                                 </button>
                                             )}
-                                            {resource.uploader.name === currentUser?.name && (
+                                            {(resource.uploader?._id === currentUser?._id || resource.uploader === currentUser?._id) && (
                                                 <button
-                                                    onClick={() => handleDeleteResource(resource.id)}
+                                                    onClick={() => handleDeleteResource(resource._id || resource.id)}
                                                     className="text-red-600 hover:text-red-700 transition-colors"
                                                 >
                                                     <Trash2 className="w-4 h-4" />
