@@ -1,10 +1,20 @@
 import express from 'express';
 import { body, validationResult } from 'express-validator';
 import User from '../models/User.js';
-import { mockUser } from '../utils/mockData.js';
 import { protect, generateToken } from '../middleware/auth.js';
 
 const router = express.Router();
+
+// Helper: format user object for response (no password)
+const formatUser = (user) => ({
+    _id: user._id,
+    name: user.name,
+    email: user.email,
+    avatar: user.avatar,
+    checkInStreak: user.checkInStreak,
+    dailyFocusGoal: user.dailyFocusGoal,
+    tribes: user.tribes,
+});
 
 // @route   POST /api/auth/register
 // @desc    Register a new user
@@ -14,19 +24,15 @@ router.post(
     [
         body('name').trim().notEmpty().withMessage('Name is required'),
         body('email').isEmail().normalizeEmail().withMessage('Valid email is required'),
-        body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
+        body('password')
+            .isLength({ min: 6 })
+            .withMessage('Password must be at least 6 characters'),
     ],
     async (req, res) => {
+        // Validate inputs
         const errors = validationResult(req);
         if (!errors.isEmpty()) {
-            return res.status(400).json({ errors: errors.array() });
-        }
-
-        if (process.env.USE_MOCK_DATA === 'true') {
-            return res.status(201).json({
-                ...mockUser,
-                token: 'mock-token-123'
-            });
+            return res.status(400).json({ message: errors.array()[0].msg, errors: errors.array() });
         }
 
         const { name, email, password } = req.body;
@@ -35,35 +41,31 @@ router.post(
             // Check if user already exists
             const existingUser = await User.findOne({ email });
             if (existingUser) {
-                return res.status(400).json({ message: 'User already exists with this email' });
+                return res.status(400).json({ message: 'An account with this email already exists' });
             }
 
-            // Create user
-            const user = await User.create({
-                name,
-                email,
-                password,
-            });
+            // Create user (password is hashed by pre-save hook in User model)
+            const user = await User.create({ name, email, password });
 
-            // Return user data and token
-            res.status(201).json({
-                _id: user._id,
-                name: user.name,
-                email: user.email,
-                avatar: user.avatar,
-                checkInStreak: user.checkInStreak,
-                dailyFocusGoal: user.dailyFocusGoal,
-                token: generateToken(user._id),
+            // Generate JWT token
+            const token = generateToken(user._id);
+
+            // Set server-side session
+            req.session.userId = user._id.toString();
+
+            return res.status(201).json({
+                user: formatUser(user),
+                token,
             });
         } catch (error) {
             console.error('Registration error:', error);
-            res.status(500).json({ message: 'Server error during registration' });
+            return res.status(500).json({ message: 'Server error during registration' });
         }
     }
 );
 
 // @route   POST /api/auth/login
-// @desc    Login user
+// @desc    Authenticate user and return token + session
 // @access  Public
 router.post(
     '/login',
@@ -72,75 +74,68 @@ router.post(
         body('password').notEmpty().withMessage('Password is required'),
     ],
     async (req, res) => {
+        // Validate inputs
         const errors = validationResult(req);
         if (!errors.isEmpty()) {
-            return res.status(400).json({ errors: errors.array() });
-        }
-
-        if (process.env.USE_MOCK_DATA === 'true') {
-            return res.json({
-                ...mockUser,
-                token: 'mock-token-123'
-            });
+            return res.status(400).json({ message: errors.array()[0].msg, errors: errors.array() });
         }
 
         const { email, password } = req.body;
 
         try {
-            // Find user and include password for comparison
+            // Find user and include password field for comparison
             const user = await User.findOne({ email }).select('+password');
-
             if (!user) {
-                return res.status(401).json({ message: 'Invalid credentials' });
+                return res.status(401).json({ message: 'Invalid email or password' });
             }
 
-            // Check password
+            // Compare provided password with hashed password
             const isMatch = await user.comparePassword(password);
             if (!isMatch) {
-                return res.status(401).json({ message: 'Invalid credentials' });
+                return res.status(401).json({ message: 'Invalid email or password' });
             }
 
-            // Return user data and token
-            res.json({
-                _id: user._id,
-                name: user.name,
-                email: user.email,
-                avatar: user.avatar,
-                checkInStreak: user.checkInStreak,
-                dailyFocusGoal: user.dailyFocusGoal,
-                token: generateToken(user._id),
+            // Generate JWT token
+            const token = generateToken(user._id);
+
+            // Set server-side session
+            req.session.userId = user._id.toString();
+
+            return res.json({
+                user: formatUser(user),
+                token,
             });
         } catch (error) {
             console.error('Login error:', error);
-            res.status(500).json({ message: 'Server error during login' });
+            return res.status(500).json({ message: 'Server error during login' });
         }
     }
 );
 
+// @route   POST /api/auth/logout
+// @desc    Logout user — destroy server session
+// @access  Public
+router.post('/logout', (req, res) => {
+    req.session.destroy((err) => {
+        if (err) {
+            console.error('Session destroy error:', err);
+            return res.status(500).json({ message: 'Could not log out. Please try again.' });
+        }
+        res.clearCookie('connect.sid'); // Clear the session cookie
+        return res.json({ message: 'Logged out successfully' });
+    });
+});
+
 // @route   GET /api/auth/me
-// @desc    Get current user profile
+// @desc    Get current authenticated user's profile
 // @access  Private
 router.get('/me', protect, async (req, res) => {
     try {
-        res.json({
-            _id: req.user._id,
-            name: req.user.name,
-            email: req.user.email,
-            avatar: req.user.avatar,
-            checkInStreak: req.user.checkInStreak,
-            dailyFocusGoal: req.user.dailyFocusGoal,
-        });
+        return res.json(formatUser(req.user));
     } catch (error) {
         console.error('Get profile error:', error);
-        res.status(500).json({ message: 'Server error' });
+        return res.status(500).json({ message: 'Server error' });
     }
-});
-
-// @route   POST /api/auth/logout
-// @desc    Logout user (client-side token removal)
-// @access  Public
-router.post('/logout', (req, res) => {
-    res.json({ message: 'Logged out successfully' });
 });
 
 export default router;

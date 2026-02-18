@@ -12,24 +12,20 @@ export function AuthProvider({ children }) {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        // Check for existing token and load user
+        // On mount: validate existing token/session with the server
         const loadUser = async () => {
             const token = localStorage.getItem('token');
             if (token) {
                 try {
-                    // Try to load user from localStorage first (for mock mode)
-                    const storedUser = localStorage.getItem('user');
-                    if (storedUser) {
-                        setUser(JSON.parse(storedUser));
-                    } else {
-                        // Fallback to API call (for real mode)
-                        const userData = await authAPI.getCurrentUser();
-                        setUser(userData);
-                    }
+                    // Always validate against the server — don't trust localStorage blindly
+                    const userData = await authAPI.getCurrentUser();
+                    setUser(userData);
                 } catch (error) {
-                    console.error('Failed to load user:', error);
+                    // Token invalid or expired — clear storage
+                    console.warn('Session validation failed, clearing credentials:', error.message);
                     localStorage.removeItem('token');
                     localStorage.removeItem('user');
+                    setUser(null);
                 }
             }
             setLoading(false);
@@ -39,37 +35,29 @@ export function AuthProvider({ children }) {
     }, []);
 
     const register = async (name, email, password) => {
-        try {
-            const data = await authAPI.register({ name, email, password });
-            setUser(data.user);
-            localStorage.setItem('token', data.token);
-            localStorage.setItem('user', JSON.stringify(data.user));
-            return data.user;
-        } catch (error) {
-            console.error('Registration failed:', error);
-            throw error;
-        }
+        const data = await authAPI.register({ name, email, password });
+        setUser(data.user);
+        localStorage.setItem('token', data.token);
+        localStorage.setItem('user', JSON.stringify(data.user));
+        return data.user;
     };
 
     const login = async (email, password) => {
-        try {
-            const data = await authAPI.login({ email, password });
-            setUser(data.user);
-            localStorage.setItem('token', data.token);
-            localStorage.setItem('user', JSON.stringify(data.user));
-            return data.user;
-        } catch (error) {
-            console.error('Login failed:', error);
-            throw error;
-        }
+        const data = await authAPI.login({ email, password });
+        setUser(data.user);
+        localStorage.setItem('token', data.token);
+        localStorage.setItem('user', JSON.stringify(data.user));
+        return data.user;
     };
 
     const logout = async () => {
         try {
+            // Destroy server-side session
             await authAPI.logout();
         } catch (error) {
-            console.error('Logout error:', error);
+            console.warn('Logout API error (continuing anyway):', error.message);
         } finally {
+            // Always clear client-side state
             setUser(null);
             localStorage.removeItem('token');
             localStorage.removeItem('user');
@@ -81,7 +69,7 @@ export function AuthProvider({ children }) {
         register,
         login,
         logout,
-        loading
+        loading,
     };
 
     return (
@@ -90,4 +78,3 @@ export function AuthProvider({ children }) {
         </AuthContext.Provider>
     );
 }
-

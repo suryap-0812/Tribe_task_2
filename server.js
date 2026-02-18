@@ -1,6 +1,8 @@
 import express from 'express';
 import mongoose from 'mongoose';
 import cors from 'cors';
+import session from 'express-session';
+import MongoStore from 'connect-mongo';
 import 'dotenv/config';
 
 // Import routes
@@ -14,17 +16,18 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // Middleware
-app.use(cors());
+app.use(cors({
+    origin: process.env.CLIENT_URL || 'http://localhost:5173',
+    credentials: true, // Allow cookies to be sent cross-origin
+}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // MongoDB connection
 const connectDB = async () => {
     try {
-        console.log('Connecting to local MongoDB...');
-
+        console.log('Connecting to MongoDB Atlas...');
         await mongoose.connect(process.env.MONGODB_URI);
-
         console.log('✅ MongoDB connected successfully');
         console.log(`📊 Database: ${mongoose.connection.name}`);
     } catch (error) {
@@ -33,13 +36,28 @@ const connectDB = async () => {
     }
 };
 
-// Connect to database only if not in mock mode
-if (process.env.USE_MOCK_DATA !== 'true') {
-    connectDB();
-} else {
-    console.log('🔧 Running in MOCK DATA mode - skipping database connection');
-}
+// Connect to database
+connectDB();
 
+// Session middleware (uses MongoDB Atlas as session store)
+app.use(
+    session({
+        secret: process.env.SESSION_SECRET,
+        resave: false,
+        saveUninitialized: false,
+        store: MongoStore.create({
+            mongoUrl: process.env.MONGODB_URI,
+            collectionName: 'sessions',
+            ttl: 7 * 24 * 60 * 60, // 7 days in seconds
+        }),
+        cookie: {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production', // HTTPS only in production
+            maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days in ms
+            sameSite: 'lax',
+        },
+    })
+);
 
 // Routes
 app.use('/api/auth', authRoutes);
@@ -72,4 +90,3 @@ app.listen(PORT, () => {
     console.log(`🚀 Server is running on port ${PORT}`);
     console.log(`🌍 Environment: ${process.env.NODE_ENV}`);
 });
-

@@ -35,14 +35,8 @@ export default function Login() {
 
     return (
         <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
-            {/* Demo Mode Notice */}
-            <div className="fixed top-0 left-0 right-0 bg-gradient-to-r from-blue-500 to-purple-600 text-white py-2 px-4 text-center shadow-md z-50">
-                <p className="text-sm font-medium">
-                    🎭 <strong>DEMO MODE</strong> - Enter any email and password to access the dashboard
-                </p>
-            </div>
 
-            <div className="sm:mx-auto sm:w-full sm:max-w-md mt-12">
+            <div className="sm:mx-auto sm:w-full sm:max-w-md mt-6">
                 <div className="flex justify-center">
                     <div className="w-12 h-12 bg-primary rounded-xl flex items-center justify-center">
                         <Target className="w-8 h-8 text-white" />
@@ -122,11 +116,7 @@ export default function Login() {
                                     className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-primary focus:border-primary sm:text-sm"
                                 />
                             </div>
-                            {isRegister && (
-                                <p className="mt-1 text-xs text-blue-600">
-                                    Demo mode: Any password will work
-                                </p>
-                            )}
+
                         </div>
 
                         {error && (
