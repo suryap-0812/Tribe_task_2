@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { ArrowLeft, Settings, MoreVertical, Shield, Clock, Users as UsersIcon, Trophy, BookOpen, Calendar, BarChart3, Trash2 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
+import { tribesAPI } from '../services/api'
 import Card, { CardContent } from '../components/ui/Card'
 import Button from '../components/ui/Button'
 import Badge from '../components/ui/Badge'

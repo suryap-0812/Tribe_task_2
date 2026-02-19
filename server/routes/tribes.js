@@ -24,7 +24,7 @@ router.get('/', async (req, res) => {
                 // Simple mock stats
                 return {
                     ...tribe,
-                    members: tribe.members.length,
+                    memberCount: tribe.members.length,
                     activeTasks: mockTasks.filter(t => t.tribe === tribe._id && !t.completed).length,
                     activeToday: mockTasks.filter(t => t.tribe === tribe._id && !t.completed && new Date(t.dueDate).setHours(0, 0, 0, 0) === new Date().setHours(0, 0, 0, 0)).length,
                     role: tribe.admin === req.user._id ? 'Leader' : 'Member'
@@ -67,7 +67,7 @@ router.get('/', async (req, res) => {
                     activeTasks,
                     activeToday,
                     role: member?.role || 'Member',
-                    members: tribe.members.length,
+                    memberCount: tribe.members.length,
                 };
             })
         );
@@ -131,7 +131,7 @@ router.post(
     '/',
     [
         body('name').trim().notEmpty().withMessage('Tribe name is required'),
-        body('color').optional().isIn(['blue', 'purple', 'green', 'red', 'orange', 'pink', 'yellow']),
+        body('color').optional().isIn(['blue', 'purple', 'green', 'red', 'orange', 'pink', 'yellow', 'indigo', 'teal']),
     ],
     async (req, res) => {
         const errors = validationResult(req);

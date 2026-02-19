@@ -14,6 +14,7 @@ const TRIBE_COLORS = [
     { name: 'Pink', value: 'pink', class: 'bg-pink-500' },
     { name: 'Indigo', value: 'indigo', class: 'bg-indigo-500' },
     { name: 'Teal', value: 'teal', class: 'bg-teal-500' },
+    { name: 'Yellow', value: 'yellow', class: 'bg-yellow-500' },
 ]
 
 export default function CreateTribeModal({ open, onOpenChange, onCreateTribe }) {

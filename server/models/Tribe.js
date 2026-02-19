@@ -32,7 +32,7 @@ const tribeSchema = new mongoose.Schema(
         color: {
             type: String,
             default: 'blue',
-            enum: ['blue', 'purple', 'green', 'red', 'orange', 'pink', 'yellow'],
+            enum: ['blue', 'purple', 'green', 'red', 'orange', 'pink', 'yellow', 'indigo', 'teal'],
         },
         createdBy: {
             type: mongoose.Schema.Types.ObjectId,

@@ -43,7 +43,7 @@ export default function MyTribes() {
                 personalTribe = await tribesAPI.createTribe({
                     name: 'Personal Space',
                     description: 'Your personal workspace resources',
-                    color: 'indigo'
+                    color: 'blue'
                 })
                 loadTribes() // refresh list
             }
@@ -82,8 +82,17 @@ export default function MyTribes() {
         loadTribes()
     }
 
-    const handleViewTribe = (tribe) => {
-        setSelectedTribe(tribe)
+    const handleViewTribe = async (tribe) => {
+        try {
+            setLoading(true)
+            const fullTribe = await tribesAPI.getTribe(tribe._id || tribe.id)
+            setSelectedTribe(fullTribe)
+        } catch (error) {
+            console.error('Failed to load tribe details:', error)
+            alert('Failed to load tribe details')
+        } finally {
+            setLoading(false)
+        }
     }
 
     const handleBackToTribes = () => {
@@ -231,7 +240,7 @@ export default function MyTribes() {
                             <div className="grid grid-cols-2 gap-4 mb-4 pb-4 border-b border-gray-200">
                                 <div>
                                     <p className="text-sm text-gray-600">Members</p>
-                                    <p className="text-lg font-semibold text-gray-900">{tribe.members}</p>
+                                    <p className="text-lg font-semibold text-gray-900">{tribe.memberCount || tribe.members}</p>
                                 </div>
                                 <div>
                                     <p className="text-sm text-gray-600">Active Tasks</p>
@@ -279,6 +288,6 @@ export default function MyTribes() {
                 onOpenChange={setIsCreateModalOpen}
                 onCreateTribe={handleCreateTribe}
             />
-        </div>
+        </div >
     )
 }
