@@ -5,6 +5,11 @@ import Task from '../models/Task.js';
 import User from '../models/User.js';
 import { mockTribes, mockTasks, mockUser } from '../utils/mockData.js';
 import { protect } from '../middleware/auth.js';
+import messagesRouter from './messages.js';
+import problemsRouter from './problems.js';
+import buddySessionsRouter from './buddySessions.js';
+import ritualsRouter from './rituals.js';
+import resourcesRouter from './resources.js';
 
 const router = express.Router();
 
@@ -419,12 +424,136 @@ router.post('/:id/join', async (req, res) => {
     }
 });
 
-// Import and use nested routes (converted to ES6)
-import messagesRouter from './messages.js';
-import problemsRouter from './problems.js';
-import buddySessionsRouter from './buddySessions.js';
-import ritualsRouter from './rituals.js';
-import resourcesRouter from './resources.js';
+// @route   GET /api/tribes/search/:id
+// @desc    Search for a tribe by ID
+// @access  Private
+router.get('/search/:id', async (req, res) => {
+    try {
+        const tribe = await Tribe.findById(req.params.id)
+            .select('name description color category members createdBy joinRequests')
+            .populate('createdBy', 'name');
+
+        if (!tribe) {
+            return res.status(404).json({ message: 'Tribe not found' });
+        }
+
+        const isMember = tribe.members.some(m => m.user.toString() === req.user._id.toString());
+        const hasRequested = tribe.joinRequests?.some(r => r.user.toString() === req.user._id.toString());
+
+        res.json({
+            ...tribe.toObject(),
+            isMember,
+            hasRequested,
+            memberCount: tribe.members.length
+        });
+    } catch (error) {
+        console.error('Search tribe error:', error);
+        res.status(404).json({ message: 'Tribe not found' });
+    }
+});
+
+// @route   POST /api/tribes/:id/request
+// @desc    Request to join a tribe
+// @access  Private
+router.post('/:id/request', async (req, res) => {
+    try {
+        const tribe = await Tribe.findById(req.params.id);
+        if (!tribe) return res.status(404).json({ message: 'Tribe not found' });
+
+        const isMember = tribe.members.some(m => m.user.toString() === req.user._id.toString());
+        if (isMember) return res.status(400).json({ message: 'Already a member' });
+
+        const hasRequested = tribe.joinRequests?.some(r => r.user.toString() === req.user._id.toString());
+        if (hasRequested) return res.status(400).json({ message: 'Join request already sent' });
+
+        tribe.joinRequests.push({ user: req.user._id });
+        await tribe.save();
+
+        res.json({ message: 'Join request sent successfully' });
+    } catch (error) {
+        console.error('Request join error:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+});
+
+// @route   GET /api/tribes/:id/requests
+// @desc    Get pending join requests
+// @access  Private
+router.get('/:id/requests', async (req, res) => {
+    try {
+        const tribe = await Tribe.findById(req.params.id).populate('joinRequests.user', 'name email avatar');
+        if (!tribe) return res.status(404).json({ message: 'Tribe not found' });
+
+        // Check if leader
+        const requester = tribe.members.find(m => m.user.toString() === req.user._id.toString());
+        if (!requester || requester.role !== 'Leader') {
+            return res.status(403).json({ message: 'Only leaders can view requests' });
+        }
+
+        res.json(tribe.joinRequests || []);
+    } catch (error) {
+        console.error('Get requests error:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+});
+
+// @route   POST /api/tribes/:id/requests/:userId/approve
+// @desc    Approve join request
+// @access  Private
+router.post('/:id/requests/:userId/approve', async (req, res) => {
+    try {
+        const tribe = await Tribe.findById(req.params.id);
+        if (!tribe) return res.status(404).json({ message: 'Tribe not found' });
+
+        // Check if leader
+        const requester = tribe.members.find(m => m.user.toString() === req.user._id.toString());
+        if (!requester || requester.role !== 'Leader') {
+            return res.status(403).json({ message: 'Only leaders can approve requests' });
+        }
+
+        const requestIndex = tribe.joinRequests.findIndex(r => r.user.toString() === req.params.userId);
+        if (requestIndex === -1) return res.status(404).json({ message: 'Request not found' });
+
+        // Move to members
+        tribe.members.push({ user: req.params.userId, role: 'Member' });
+        tribe.joinRequests.splice(requestIndex, 1);
+        await tribe.save();
+
+        // Add tribe to user's list
+        await User.findByIdAndUpdate(req.params.userId, {
+            $push: { tribes: tribe._id }
+        });
+
+        res.json({ message: 'Request approved' });
+    } catch (error) {
+        console.error('Approve request error:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+});
+
+// @route   POST /api/tribes/:id/requests/:userId/reject
+// @desc    Reject join request
+// @access  Private
+router.post('/:id/requests/:userId/reject', async (req, res) => {
+    try {
+        const tribe = await Tribe.findById(req.params.id);
+        if (!tribe) return res.status(404).json({ message: 'Tribe not found' });
+
+        // Check if leader
+        const requester = tribe.members.find(m => m.user.toString() === req.user._id.toString());
+        if (!requester || requester.role !== 'Leader') {
+            return res.status(403).json({ message: 'Only leaders can reject requests' });
+        }
+
+        tribe.joinRequests = tribe.joinRequests.filter(r => r.user.toString() !== req.params.userId);
+        await tribe.save();
+
+        res.json({ message: 'Request rejected' });
+    } catch (error) {
+        console.error('Reject request error:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+});
 
 // Mount nested routes
 router.use('/:tribeId/messages', messagesRouter);

@@ -4,6 +4,7 @@ import Card, { CardHeader, CardTitle, CardContent } from '../components/ui/Card'
 import Button from '../components/ui/Button'
 import Badge from '../components/ui/Badge'
 import CreateTribeModal from '../components/CreateTribeModal'
+import JoinTribeModal from '../components/JoinTribeModal'
 import TribeDetails from '../components/TribeDetails'
 import MySpace from '../components/MySpace'
 import { tribesAPI, tasksAPI } from '../services/api'
@@ -13,6 +14,7 @@ export default function MyTribes() {
     const [stats, setStats] = useState({ personalTasks: 0, personalResources: 0, personalTribeId: null })
     const [loading, setLoading] = useState(true)
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
+    const [isJoinModalOpen, setIsJoinModalOpen] = useState(false)
     const [selectedTribe, setSelectedTribe] = useState(null)
     const [showMySpace, setShowMySpace] = useState(false)
 
@@ -61,21 +63,8 @@ export default function MyTribes() {
         }
     }
 
-    const handleJoinTribe = async () => {
-        const tribeId = prompt('Enter Tribe ID to join:')
-        if (tribeId) {
-            try {
-                setLoading(true)
-                await tribesAPI.joinTribe(tribeId)
-                alert('Successfully joined the tribe!')
-                loadTribes()
-            } catch (error) {
-                console.error('Failed to join tribe:', error)
-                alert(error.message || 'Failed to join tribe')
-            } finally {
-                setLoading(false)
-            }
-        }
+    const handleJoinTribe = () => {
+        setIsJoinModalOpen(true)
     }
 
     const handleCreateTribe = (newTribe) => {
@@ -295,6 +284,14 @@ export default function MyTribes() {
                 open={isCreateModalOpen}
                 onOpenChange={setIsCreateModalOpen}
                 onCreateTribe={handleCreateTribe}
+            />
+
+            <JoinTribeModal
+                open={isJoinModalOpen}
+                onOpenChange={setIsJoinModalOpen}
+                onJoinRequested={() => {
+                    // Could refresh something, but request is pending
+                }}
             />
         </div >
     )

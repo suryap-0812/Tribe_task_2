@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { UserPlus, MoreVertical, Mail, Shield, Crown, Star, Circle } from 'lucide-react'
+import { UserPlus, MoreVertical, Mail, Shield, Crown, Star, Circle, Loader2 } from 'lucide-react'
 import Card, { CardContent } from './ui/Card'
 import Button from './ui/Button'
 import Badge from './ui/Badge'
@@ -15,6 +15,43 @@ export default function TribeMembers({ tribeId, members, currentUser, userRole, 
 
     const roles = ['all', 'leader', 'member', 'contributor']
     const statuses = ['all', 'online', 'away', 'offline']
+    const [joinRequests, setJoinRequests] = useState([])
+    const [activeMembersTab, setActiveMembersTab] = useState('members') // members or requests
+    const [requestsLoading, setRequestsLoading] = useState(false)
+
+    const fetchJoinRequests = async () => {
+        if (!isLeader || !tribeId) return
+        try {
+            setRequestsLoading(true)
+            const data = await tribesAPI.getJoinRequests(tribeId)
+            setJoinRequests(data)
+        } catch (error) {
+            console.error('Failed to fetch requests:', error)
+        } finally {
+            setRequestsLoading(false)
+        }
+    }
+
+    const handleApprove = async (userId) => {
+        try {
+            await tribesAPI.approveJoinRequest(tribeId, userId)
+            fetchJoinRequests()
+            if (onInvite) onInvite() // Refresh member list
+        } catch (error) {
+            console.error('Failed to approve:', error)
+            alert('Failed to approve request')
+        }
+    }
+
+    const handleReject = async (userId) => {
+        try {
+            await tribesAPI.rejectJoinRequest(tribeId, userId)
+            fetchJoinRequests()
+        } catch (error) {
+            console.error('Failed to reject:', error)
+            alert('Failed to reject request')
+        }
+    }
 
     const getRoleIcon = (role) => {
         switch (role?.toLowerCase()) {
@@ -84,208 +121,298 @@ export default function TribeMembers({ tribeId, members, currentUser, userRole, 
                     <h3 className="text-xl font-bold text-gray-900">Tribe Members</h3>
                     <p className="text-sm text-gray-600 mt-1">{members.length} total members</p>
                 </div>
-                {isLeader && (
-                    <Button
-                        onClick={() => setShowInviteModal(true)}
-                        className="flex items-center gap-2"
-                    >
-                        <UserPlus className="w-4 h-4" />
-                        Invite Member
-                    </Button>
-                )}
-            </div>
-
-            {/* Filters */}
-            <div className="flex items-center gap-4 flex-wrap">
-                <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-gray-700">Role:</span>
-                    <div className="flex gap-2">
-                        {roles.map(role => (
+                <div className="flex gap-2">
+                    {isLeader && (
+                        <div className="flex bg-gray-100 p-1 rounded-lg">
                             <button
-                                key={role}
-                                onClick={() => setFilterRole(role)}
-                                className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${filterRole === role
-                                    ? 'bg-primary text-white'
-                                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                                    }`}
+                                onClick={() => setActiveMembersTab('members')}
+                                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${activeMembersTab === 'members' ? 'bg-white shadow text-primary' : 'text-gray-600 hover:text-gray-900'}`}
                             >
-                                {role.charAt(0).toUpperCase() + role.slice(1)}
+                                Members
                             </button>
-                        ))}
-                    </div>
-                </div>
-
-                <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-gray-700">Status:</span>
-                    <div className="flex gap-2">
-                        {statuses.map(status => (
                             <button
-                                key={status}
-                                onClick={() => setFilterStatus(status)}
-                                className={`px-3 py-1.5 text-sm rounded-lg transition-colors flex items-center gap-2 ${filterStatus === status
-                                    ? 'bg-primary text-white'
-                                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                                    }`}
+                                onClick={() => {
+                                    setActiveMembersTab('requests')
+                                    fetchJoinRequests()
+                                }}
+                                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all relative ${activeMembersTab === 'requests' ? 'bg-white shadow text-primary' : 'text-gray-600 hover:text-gray-900'}`}
                             >
-                                {status !== 'all' && (
-                                    <Circle className={`w-2 h-2 ${getStatusColor(status)} rounded-full`} fill="currentColor" />
+                                Requests
+                                {joinRequests.length > 0 && (
+                                    <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[10px] rounded-full flex items-center justify-center border-2 border-white">
+                                        {joinRequests.length}
+                                    </span>
                                 )}
-                                {status.charAt(0).toUpperCase() + status.slice(1)}
                             </button>
-                        ))}
-                    </div>
-                </div>
-
-                <div className="ml-auto flex gap-2">
-                    <button
-                        onClick={() => setViewMode('grid')}
-                        className={`p-2 rounded-lg ${viewMode === 'grid' ? 'bg-primary text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
-                    >
-                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                            <path d="M5 3a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2V5a2 2 0 00-2-2H5zM5 11a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2v-2a2 2 0 00-2-2H5zM11 5a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V5zM11 13a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
-                        </svg>
-                    </button>
-                    <button
-                        onClick={() => setViewMode('list')}
-                        className={`p-2 rounded-lg ${viewMode === 'list' ? 'bg-primary text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
-                    >
-                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                            <path fillRule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd" />
-                        </svg>
-                    </button>
+                        </div>
+                    )}
+                    {isLeader && (
+                        <Button
+                            onClick={() => setShowInviteModal(true)}
+                            className="flex items-center gap-2"
+                        >
+                            <UserPlus className="w-4 h-4" />
+                            Invite Member
+                        </Button>
+                    )}
                 </div>
             </div>
 
-            {/* Members Display */}
-            {filteredMembers.length === 0 ? (
-                <Card className="py-16">
-                    <div className="text-center">
-                        <div className="text-6xl mb-4">👥</div>
-                        <h3 className="text-lg font-semibold text-gray-900 mb-2">No members found</h3>
-                        <p className="text-gray-600">Try adjusting your filters</p>
+            {activeMembersTab === 'members' ? (
+                <>
+
+                    {/* Filters */}
+                    <div className="flex items-center gap-4 flex-wrap">
+                        <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium text-gray-700">Role:</span>
+                            <div className="flex gap-2">
+                                {roles.map(role => (
+                                    <button
+                                        key={role}
+                                        onClick={() => setFilterRole(role)}
+                                        className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${filterRole === role
+                                            ? 'bg-primary text-white'
+                                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                            }`}
+                                    >
+                                        {role.charAt(0).toUpperCase() + role.slice(1)}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium text-gray-700">Status:</span>
+                            <div className="flex gap-2">
+                                {statuses.map(status => (
+                                    <button
+                                        key={status}
+                                        onClick={() => setFilterStatus(status)}
+                                        className={`px-3 py-1.5 text-sm rounded-lg transition-colors flex items-center gap-2 ${filterStatus === status
+                                            ? 'bg-primary text-white'
+                                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                            }`}
+                                    >
+                                        {status !== 'all' && (
+                                            <Circle className={`w-2 h-2 ${getStatusColor(status)} rounded-full`} fill="currentColor" />
+                                        )}
+                                        {status.charAt(0).toUpperCase() + status.slice(1)}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="ml-auto flex gap-2">
+                            <button
+                                onClick={() => setViewMode('grid')}
+                                className={`p-2 rounded-lg ${viewMode === 'grid' ? 'bg-primary text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                            >
+                                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                                    <path d="M5 3a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2V5a2 2 0 00-2-2H5zM5 11a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2v-2a2 2 0 00-2-2H5zM11 5a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V5zM11 13a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+                                </svg>
+                            </button>
+                            <button
+                                onClick={() => setViewMode('list')}
+                                className={`p-2 rounded-lg ${viewMode === 'list' ? 'bg-primary text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                            >
+                                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fillRule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd" />
+                                </svg>
+                            </button>
+                        </div>
                     </div>
-                </Card>
-            ) : viewMode === 'grid' ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {filteredMembers.map(member => (
-                        <Card key={member._id} className="hover:shadow-lg transition-shadow">
-                            <CardContent className="pt-6">
-                                <div className="flex items-start justify-between mb-4">
-                                    <div className="flex items-center gap-3">
-                                        <div className="relative">
-                                            <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white text-lg font-bold">
-                                                {member.avatar || (member.name ? member.name.substring(0, 2).toUpperCase() : '??')}
-                                            </div>
-                                            <div className={`absolute -bottom-0.5 -right-0.5 w-4 h-4 ${getStatusColor(member.status)} rounded-full border-2 border-white`} />
-                                        </div>
-                                        <div>
-                                            <div className="flex items-center gap-2">
-                                                <h4 className="font-semibold text-gray-900">{member.name}</h4>
-                                                {getRoleIcon(member.role)}
-                                            </div>
-                                            <p className="text-xs text-gray-500">{getStatusText(member.status)}</p>
-                                        </div>
-                                    </div>
 
-                                    {member._id !== currentUser._id && (
-                                        <div className="relative group">
-                                            <button className="p-1 hover:bg-gray-100 rounded transition-colors">
-                                                <MoreVertical className="w-4 h-4 text-gray-400" />
-                                            </button>
-                                            <div className="hidden group-hover:block absolute right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg py-1 z-10 min-w-[120px]">
-                                                <button className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50">
-                                                    View Profile
-                                                </button>
-                                                <button className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50">
-                                                    Send Message
-                                                </button>
-                                                {isLeader && (
-                                                    <button
-                                                        onClick={() => handleRemove(member._id)}
-                                                        className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50"
-                                                    >
-                                                        Remove
+                    {/* Members Display */}
+                    {filteredMembers.length === 0 ? (
+                        <Card className="py-16">
+                            <div className="text-center">
+                                <div className="text-6xl mb-4">👥</div>
+                                <h3 className="text-lg font-semibold text-gray-900 mb-2">No members found</h3>
+                                <p className="text-gray-600">Try adjusting your filters</p>
+                            </div>
+                        </Card>
+                    ) : viewMode === 'grid' ? (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {filteredMembers.map(member => (
+                                <Card key={member._id} className="hover:shadow-lg transition-shadow">
+                                    <CardContent className="pt-6">
+                                        <div className="flex items-start justify-between mb-4">
+                                            <div className="flex items-center gap-3">
+                                                <div className="relative">
+                                                    <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white text-lg font-bold">
+                                                        {member.avatar || (member.name ? member.name.substring(0, 2).toUpperCase() : '??')}
+                                                    </div>
+                                                    <div className={`absolute -bottom-0.5 -right-0.5 w-4 h-4 ${getStatusColor(member.status)} rounded-full border-2 border-white`} />
+                                                </div>
+                                                <div>
+                                                    <div className="flex items-center gap-2">
+                                                        <h4 className="font-semibold text-gray-900">{member.name}</h4>
+                                                        {getRoleIcon(member.role)}
+                                                    </div>
+                                                    <p className="text-xs text-gray-500">{getStatusText(member.status)}</p>
+                                                </div>
+                                            </div>
+
+                                            {member._id !== currentUser._id && (
+                                                <div className="relative group">
+                                                    <button className="p-1 hover:bg-gray-100 rounded transition-colors">
+                                                        <MoreVertical className="w-4 h-4 text-gray-400" />
                                                     </button>
-                                                )}
+                                                    <div className="hidden group-hover:block absolute right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg py-1 z-10 min-w-[120px]">
+                                                        <button className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50">
+                                                            View Profile
+                                                        </button>
+                                                        <button className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50">
+                                                            Send Message
+                                                        </button>
+                                                        {isLeader && (
+                                                            <button
+                                                                onClick={() => handleRemove(member._id)}
+                                                                className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50"
+                                                            >
+                                                                Remove
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <Badge variant={member.role === 'leader' ? 'default' : 'secondary'} className="text-xs">
+                                                {member.role || 'Member'}
+                                            </Badge>
+
+                                            <div className="grid grid-cols-2 gap-2 pt-3 border-t border-gray-100">
+                                                <div>
+                                                    <p className="text-xs text-gray-500">Tasks</p>
+                                                    <p className="text-lg font-semibold text-gray-900">{member.tasksCompleted || 0}</p>
+                                                </div>
+                                                <div>
+                                                    <p className="text-xs text-gray-500">Focus Time</p>
+                                                    <p className="text-lg font-semibold text-gray-900">{member.focusTime || 0}m</p>
+                                                </div>
                                             </div>
                                         </div>
-                                    )}
-                                </div>
+                                    </CardContent>
+                                </Card>
+                            ))}
+                        </div>
+                    ) : (
+                        <Card>
+                            <CardContent className="p-0">
+                                <div className="divide-y divide-gray-200">
+                                    {filteredMembers.map(member => (
+                                        <div key={member._id} className="p-4 hover:bg-gray-50 transition-colors">
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-4">
+                                                    <div className="relative">
+                                                        <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white font-medium">
+                                                            {member.avatar || (member.name ? member.name.substring(0, 2).toUpperCase() : '??')}
+                                                        </div>
+                                                        <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 ${getStatusColor(member.status)} rounded-full border-2 border-white`} />
+                                                    </div>
+                                                    <div>
+                                                        <div className="flex items-center gap-2">
+                                                            <h4 className="font-medium text-gray-900">{member.name}</h4>
+                                                            {getRoleIcon(member.role)}
+                                                            <Badge variant="secondary" className="text-xs">
+                                                                {member.role || 'Member'}
+                                                            </Badge>
+                                                        </div>
+                                                        <p className="text-sm text-gray-500">{member.email}</p>
+                                                    </div>
+                                                </div>
 
-                                <div className="space-y-2">
-                                    <Badge variant={member.role === 'leader' ? 'default' : 'secondary'} className="text-xs">
-                                        {member.role || 'Member'}
-                                    </Badge>
+                                                <div className="flex items-center gap-6">
+                                                    <div className="text-center">
+                                                        <p className="text-sm font-semibold text-gray-900">{member.tasksCompleted || 0}</p>
+                                                        <p className="text-xs text-gray-500">Tasks</p>
+                                                    </div>
+                                                    <div className="text-center">
+                                                        <p className="text-sm font-semibold text-gray-900">{member.focusTime || 0}m</p>
+                                                        <p className="text-xs text-gray-500">Focus</p>
+                                                    </div>
+                                                    <Badge variant={member.status === 'online' ? 'success' : 'secondary'}>
+                                                        {getStatusText(member.status)}
+                                                    </Badge>
 
-                                    <div className="grid grid-cols-2 gap-2 pt-3 border-t border-gray-100">
-                                        <div>
-                                            <p className="text-xs text-gray-500">Tasks</p>
-                                            <p className="text-lg font-semibold text-gray-900">{member.tasksCompleted || 0}</p>
+                                                    {isLeader && member._id !== currentUser._id && (
+                                                        <button
+                                                            onClick={() => handleRemove(member._id)}
+                                                            className="text-red-600 hover:text-red-700 text-sm font-medium"
+                                                        >
+                                                            Remove
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </div>
                                         </div>
-                                        <div>
-                                            <p className="text-xs text-gray-500">Focus Time</p>
-                                            <p className="text-lg font-semibold text-gray-900">{member.focusTime || 0}m</p>
-                                        </div>
-                                    </div>
+                                    ))}
                                 </div>
                             </CardContent>
                         </Card>
-                    ))}
-                </div>
+                    )}
+                </>
             ) : (
-                <Card>
-                    <CardContent className="p-0">
-                        <div className="divide-y divide-gray-200">
-                            {filteredMembers.map(member => (
-                                <div key={member._id} className="p-4 hover:bg-gray-50 transition-colors">
-                                    <div className="flex items-center justify-between">
-                                        <div className="flex items-center gap-4">
-                                            <div className="relative">
-                                                <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white font-medium">
-                                                    {member.avatar || (member.name ? member.name.substring(0, 2).toUpperCase() : '??')}
+                <div className="space-y-4">
+                    {requestsLoading ? (
+                        <div className="flex items-center justify-center py-12">
+                            <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                        </div>
+                    ) : joinRequests.length === 0 ? (
+                        <Card className="py-16">
+                            <div className="text-center">
+                                <div className="text-6xl mb-4">📬</div>
+                                <h3 className="text-lg font-semibold text-gray-900 mb-2">No pending requests</h3>
+                                <p className="text-gray-600">All caught up! New requests will appear here.</p>
+                            </div>
+                        </Card>
+                    ) : (
+                        <div className="grid grid-cols-1 gap-4">
+                            {joinRequests.map(request => (
+                                <Card key={request.user?._id} className="overflow-hidden">
+                                    <CardContent className="p-4 sm:p-6">
+                                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                                            <div className="flex items-center gap-4">
+                                                <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center text-primary font-bold text-lg border-2 border-primary/20">
+                                                    {request.user?.name?.charAt(0) || 'U'}
                                                 </div>
-                                                <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 ${getStatusColor(member.status)} rounded-full border-2 border-white`} />
-                                            </div>
-                                            <div>
-                                                <div className="flex items-center gap-2">
-                                                    <h4 className="font-medium text-gray-900">{member.name}</h4>
-                                                    {getRoleIcon(member.role)}
-                                                    <Badge variant="secondary" className="text-xs">
-                                                        {member.role || 'Member'}
-                                                    </Badge>
+                                                <div>
+                                                    <h4 className="font-bold text-gray-900">{request.user?.name}</h4>
+                                                    <div className="flex items-center gap-2 text-sm text-gray-500">
+                                                        <Mail className="w-3 h-3" />
+                                                        {request.user?.email}
+                                                    </div>
+                                                    <p className="text-xs text-gray-400 mt-1">
+                                                        Requested {new Date(request.requestedAt).toLocaleDateString()}
+                                                    </p>
                                                 </div>
-                                                <p className="text-sm text-gray-500">{member.email}</p>
                                             </div>
-                                        </div>
-
-                                        <div className="flex items-center gap-6">
-                                            <div className="text-center">
-                                                <p className="text-sm font-semibold text-gray-900">{member.tasksCompleted || 0}</p>
-                                                <p className="text-xs text-gray-500">Tasks</p>
-                                            </div>
-                                            <div className="text-center">
-                                                <p className="text-sm font-semibold text-gray-900">{member.focusTime || 0}m</p>
-                                                <p className="text-xs text-gray-500">Focus</p>
-                                            </div>
-                                            <Badge variant={member.status === 'online' ? 'success' : 'secondary'}>
-                                                {getStatusText(member.status)}
-                                            </Badge>
-
-                                            {isLeader && member._id !== currentUser._id && (
-                                                <button
-                                                    onClick={() => handleRemove(member._id)}
-                                                    className="text-red-600 hover:text-red-700 text-sm font-medium"
+                                            <div className="flex items-center gap-2">
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    className="flex-1 sm:flex-none text-red-600 hover:bg-red-50 hover:text-red-700 border-red-200"
+                                                    onClick={() => handleReject(request.user?._id)}
                                                 >
-                                                    Remove
-                                                </button>
-                                            )}
+                                                    Reject
+                                                </Button>
+                                                <Button
+                                                    size="sm"
+                                                    className="flex-1 sm:flex-none"
+                                                    onClick={() => handleApprove(request.user?._id)}
+                                                >
+                                                    Approve
+                                                </Button>
+                                            </div>
                                         </div>
-                                    </div>
-                                </div>
+                                    </CardContent>
+                                </Card>
                             ))}
                         </div>
-                    </CardContent>
-                </Card>
+                    )}
+                </div>
             )}
 
             {/* Invite Modal */}

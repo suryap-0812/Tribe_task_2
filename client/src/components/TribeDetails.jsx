@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ArrowLeft, Settings, MoreVertical, Shield, Clock, Users as UsersIcon, Trophy, BookOpen, Calendar, BarChart3, Trash2, Target, Award } from 'lucide-react'
+import { ArrowLeft, Settings, MoreVertical, Shield, Clock, Users as UsersIcon, Trophy, BookOpen, Calendar, BarChart3, Trash2, Target, Award, Eye, EyeOff, Copy } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { tribesAPI } from '../services/api'
 import Card, { CardContent } from '../components/ui/Card'
@@ -19,6 +19,7 @@ export default function TribeDetails({ tribe: initialTribe, onBack }) {
     const [tribe, setTribe] = useState(initialTribe)
     const [activeTab, setActiveTab] = useState('overview')
     const [loading, setLoading] = useState(false)
+    const [showId, setShowId] = useState(false)
     const navigate = useNavigate()
 
     // Get current user from localStorage
@@ -141,6 +142,30 @@ export default function TribeDetails({ tribe: initialTribe, onBack }) {
             <div>
                 <div className="flex items-center flex-wrap gap-2 sm:gap-3">
                     <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">{tribe.name}</h1>
+                    <div className="flex items-center gap-2 bg-gray-100 px-2 py-1 rounded-lg border border-gray-200">
+                        <span className="text-xs font-mono text-gray-500">
+                            ID: {showId ? tribe._id : '••••••••••••••••'}
+                        </span>
+                        <button
+                            onClick={() => setShowId(!showId)}
+                            className="p-1 hover:bg-gray-200 rounded transition-colors"
+                            title={showId ? "Hide ID" : "Show ID"}
+                        >
+                            {showId ? <EyeOff className="w-3.5 h-3.5 text-gray-400" /> : <Eye className="w-3.5 h-3.5 text-gray-400" />}
+                        </button>
+                        {showId && (
+                            <button
+                                onClick={() => {
+                                    navigator.clipboard.writeText(tribe._id)
+                                    alert('ID copied to clipboard!')
+                                }}
+                                className="p-1 hover:bg-gray-200 rounded transition-colors"
+                                title="Copy ID"
+                            >
+                                <Copy className="w-3.5 h-3.5 text-gray-400" />
+                            </button>
+                        )}
+                    </div>
                     <div className="flex items-center gap-2">
                         <Badge variant="secondary" className="bg-primary/10 text-primary border-none">
                             {tribe.category || 'General'}
