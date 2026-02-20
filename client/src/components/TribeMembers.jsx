@@ -3,6 +3,7 @@ import { UserPlus, MoreVertical, Mail, Shield, Crown, Star, Circle } from 'lucid
 import Card, { CardContent } from './ui/Card'
 import Button from './ui/Button'
 import Badge from './ui/Badge'
+import { tribesAPI } from '../services/api'
 
 export default function TribeMembers({ tribeId, members, currentUser, onInvite, onRemove }) {
     const [viewMode, setViewMode] = useState('grid') // grid or list
@@ -27,13 +28,12 @@ export default function TribeMembers({ tribeId, members, currentUser, onInvite, 
     }
 
     const getStatusColor = (status) => {
-        switch (status?.toLowerCase()) {
-            case 'online':
-                return 'bg-green-500'
-            case 'away':
-                return 'bg-yellow-500'
-            default:
-                return 'bg-gray-400'
+        switch (status) {
+            case 'online': return 'bg-green-500'
+            case 'offline': return 'bg-gray-400'
+            case 'away': return 'bg-yellow-500'
+            case 'busy': return 'bg-red-500'
+            default: return 'bg-gray-400'
         }
     }
 
@@ -48,22 +48,30 @@ export default function TribeMembers({ tribeId, members, currentUser, onInvite, 
     })
 
     const handleInvite = async () => {
-        if (inviteEmail.trim() && onInvite) {
+        if (inviteEmail.trim() && tribeId) {
+            setIsInviting(true)
             try {
-                setIsInviting(true)
-                await onInvite({ email: inviteEmail })
+                await tribesAPI.addMember(tribeId, inviteEmail)
                 setInviteEmail('')
                 setShowInviteModal(false)
+                // Ideally we should tell the parent to re-fetch tribe data
+                if (onInvite) onInvite({ email: inviteEmail })
+            } catch (error) {
+                console.error('Failed to invite member:', error)
+                alert('Failed to invite member. Make sure the user exists.')
             } finally {
                 setIsInviting(false)
             }
         }
     }
 
-    const handleRemoveMember = (memberId) => {
-        if (window.confirm('Are you sure you want to remove this member?')) {
-            if (onRemove) {
-                onRemove(memberId)
+    const handleRemove = async (userId) => {
+        if (window.confirm('Are you sure you want to remove this member?') && tribeId) {
+            try {
+                await tribesAPI.removeMember(tribeId, userId)
+                if (onRemove) onRemove(userId)
+            } catch (error) {
+                console.error('Failed to remove member:', error)
             }
         }
     }
@@ -164,7 +172,7 @@ export default function TribeMembers({ tribeId, members, currentUser, onInvite, 
                                     <div className="flex items-center gap-3">
                                         <div className="relative">
                                             <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white text-lg font-bold">
-                                                {member.avatar || member.name.substring(0, 2).toUpperCase()}
+                                                {member.avatar || (member.name ? member.name.substring(0, 2).toUpperCase() : '??')}
                                             </div>
                                             <div className={`absolute -bottom-0.5 -right-0.5 w-4 h-4 ${getStatusColor(member.status)} rounded-full border-2 border-white`} />
                                         </div>
@@ -230,7 +238,7 @@ export default function TribeMembers({ tribeId, members, currentUser, onInvite, 
                                         <div className="flex items-center gap-4">
                                             <div className="relative">
                                                 <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white font-medium">
-                                                    {member.avatar || member.name.substring(0, 2).toUpperCase()}
+                                                    {member.avatar || (member.name ? member.name.substring(0, 2).toUpperCase() : '??')}
                                                 </div>
                                                 <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 ${getStatusColor(member.status)} rounded-full border-2 border-white`} />
                                             </div>

@@ -1,12 +1,33 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Plus, ThumbsUp, MessageSquare, Filter, CheckCircle, Clock, AlertCircle } from 'lucide-react'
 import Card, { CardContent } from './ui/Card'
 import Button from './ui/Button'
 import Badge from './ui/Badge'
+import { tribesAPI } from '../services/api'
 
 export default function ProblemSolvingBoard({ tribeId, problems: initialProblems, currentUser, onCreateProblem, onAddSolution, onVote }) {
     const [problems, setProblems] = useState(initialProblems || [])
     const [showCreateModal, setShowCreateModal] = useState(false)
+
+    const fetchProblems = async () => {
+        if (tribeId) {
+            try {
+                const data = await tribesAPI.getProblems(tribeId)
+                setProblems(data.problems || [])
+                // If a problem was selected, re-fetch its details to update the modal
+                if (selectedProblem) {
+                    const updatedSelected = data.problems.find(p => (p._id === selectedProblem._id || p.id === selectedProblem.id))
+                    setSelectedProblem(updatedSelected || null)
+                }
+            } catch (error) {
+                console.error('Failed to fetch problems:', error)
+            }
+        }
+    }
+
+    useEffect(() => {
+        fetchProblems()
+    }, [tribeId]) // Depend on tribeId to refetch when it changes
     const [selectedProblem, setSelectedProblem] = useState(null)
     const [filterStatus, setFilterStatus] = useState('all')
     const [filterCategory, setFilterCategory] = useState('all')
@@ -60,84 +81,61 @@ export default function ProblemSolvingBoard({ tribeId, problems: initialProblems
         resolved: filteredProblems.filter(p => p.status === 'resolved')
     }
 
-    const handleCreateProblem = () => {
+    const handleCreateProblem = async () => {
         if (newProblem.title.trim()) {
-            const problem = {
-                id: Date.now(),
-                ...newProblem,
-                creator: currentUser,
-                status: 'open',
-                solutions: [],
-                createdAt: new Date(),
-                votes: 0
-            }
+            try {
+                const data = await tribesAPI.createProblem(tribeId, newProblem)
+                await fetchProblems() // Re-fetch all problems to update state from backend
+                setNewProblem({ title: '', description: '', category: 'general' })
+                setShowCreateModal(false)
 
-            setProblems([problem, ...problems])
-            setNewProblem({ title: '', description: '', category: 'general' })
-            setShowCreateModal(false)
-
-            if (onCreateProblem) {
-                onCreateProblem(problem)
+                if (onCreateProblem) {
+                    onCreateProblem(data.problem)
+                }
+            } catch (error) {
+                console.error('Failed to create problem:', error)
+                alert('Failed to create problem')
             }
         }
     }
 
-    const handleAddSolution = (problemId) => {
+    const handleAddSolution = async (problemId) => {
         if (newSolution.trim()) {
-            const updatedProblems = problems.map(problem => {
-                if (problem.id === problemId) {
-                    const solution = {
-                        id: Date.now(),
-                        author: currentUser,
-                        content: newSolution,
-                        votes: 0,
-                        timestamp: new Date()
-                    }
-                    return {
-                        ...problem,
-                        solutions: [...problem.solutions, solution],
-                        status: problem.status === 'open' ? 'discussing' : problem.status
-                    }
+            try {
+                await tribesAPI.addSolution(tribeId, problemId, { content: newSolution })
+                await fetchProblems() // Re-fetch all problems to update state from backend
+                setNewSolution('')
+
+                if (onAddSolution) {
+                    onAddSolution(problemId, newSolution)
                 }
-                return problem
-            })
-
-            setProblems(updatedProblems)
-            setNewSolution('')
-
-            if (onAddSolution) {
-                onAddSolution(problemId, newSolution)
+            } catch (error) {
+                console.error('Failed to add solution:', error)
+                alert('Failed to add solution')
             }
         }
     }
 
-    const handleVote = (problemId, solutionId) => {
-        const updatedProblems = problems.map(problem => {
-            if (problem.id === problemId) {
-                return {
-                    ...problem,
-                    solutions: problem.solutions.map(solution =>
-                        solution.id === solutionId
-                            ? { ...solution, votes: solution.votes + 1 }
-                            : solution
-                    )
-                }
+    const handleVote = async (problemId, solutionId) => {
+        try {
+            await tribesAPI.voteSolution(tribeId, problemId, solutionId)
+            await fetchProblems() // Re-fetch all problems to update state from backend
+
+            if (onVote) {
+                onVote(problemId, solutionId)
             }
-            return problem
-        })
-
-        setProblems(updatedProblems)
-
-        if (onVote) {
-            onVote(problemId, solutionId)
+        } catch (error) {
+            console.error('Failed to vote:', error)
         }
     }
 
-    const handleMarkResolved = (problemId) => {
-        const updatedProblems = problems.map(problem =>
-            problem.id === problemId ? { ...problem, status: 'resolved' } : problem
-        )
-        setProblems(updatedProblems)
+    const handleMarkResolved = async (problemId) => {
+        try {
+            await tribesAPI.updateProblemStatus(tribeId, problemId, { status: 'resolved' })
+            await fetchProblems() // Re-fetch all problems to update state from backend
+        } catch (error) {
+            console.error('Failed to resolve problem:', error)
+        }
     }
 
     return (
@@ -168,8 +166,8 @@ export default function ProblemSolvingBoard({ tribeId, problems: initialProblems
                                 key={cat}
                                 onClick={() => setFilterCategory(cat)}
                                 className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${filterCategory === cat
-                                        ? 'bg-primary text-white'
-                                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                    ? 'bg-primary text-white'
+                                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                                     }`}
                             >
                                 {cat.charAt(0).toUpperCase() + cat.slice(1)}
@@ -196,7 +194,7 @@ export default function ProblemSolvingBoard({ tribeId, problems: initialProblems
                         <div className="space-y-3 min-h-[400px]">
                             {groupedProblems[status].map(problem => (
                                 <Card
-                                    key={problem.id}
+                                    key={problem._id || problem.id}
                                     className="cursor-pointer hover:shadow-md transition-shadow"
                                     onClick={() => setSelectedProblem(problem)}
                                 >
@@ -363,7 +361,7 @@ export default function ProblemSolvingBoard({ tribeId, problems: initialProblems
                                         <Button
                                             size="sm"
                                             variant="secondary"
-                                            onClick={() => handleMarkResolved(selectedProblem.id)}
+                                            onClick={() => handleMarkResolved(selectedProblem._id || selectedProblem.id)}
                                         >
                                             Mark as Resolved
                                         </Button>
@@ -373,10 +371,10 @@ export default function ProblemSolvingBoard({ tribeId, problems: initialProblems
                                 {selectedProblem.solutions
                                     .sort((a, b) => b.votes - a.votes)
                                     .map(solution => (
-                                        <div key={solution.id} className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+                                        <div key={solution._id || solution.id} className="p-4 bg-gray-50 rounded-lg border border-gray-200">
                                             <div className="flex gap-3">
                                                 <button
-                                                    onClick={() => handleVote(selectedProblem.id, solution.id)}
+                                                    onClick={() => handleVote(selectedProblem._id || selectedProblem.id, solution._id || solution.id)}
                                                     className="flex flex-col items-center gap-1 px-2"
                                                 >
                                                     <ThumbsUp className="w-5 h-5 text-gray-400 hover:text-primary transition-colors" />
@@ -409,7 +407,7 @@ export default function ProblemSolvingBoard({ tribeId, problems: initialProblems
                                     />
                                     <div className="flex justify-end mt-2">
                                         <Button
-                                            onClick={() => handleAddSolution(selectedProblem.id)}
+                                            onClick={() => handleAddSolution(selectedProblem._id || selectedProblem.id)}
                                             disabled={!newSolution.trim()}
                                         >
                                             <MessageSquare className="w-4 h-4 mr-2" />

@@ -1,46 +1,28 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Calendar, Plus, Bell, Users, Award, Clock } from 'lucide-react'
 import Card, { CardContent } from './ui/Card'
 import Button from './ui/Button'
 import Badge from './ui/Badge'
+import { tribesAPI } from '../services/api'
 
 export default function RitualScheduler({ tribeId, rituals: initialRituals, currentUser, onSchedule, onAttend }) {
-    const [rituals, setRituals] = useState(initialRituals || [
-        {
-            id: 1,
-            name: 'Daily Standup',
-            description: 'Quick 15-min sync on progress and blockers',
-            schedule: { type: 'daily', time: '10:00 AM' },
-            nextDate: new Date(new Date().setHours(10, 0, 0, 0)),
-            participants: 8,
-            attendance: [],
-            streak: 5,
-            badge: '🔥'
-        },
-        {
-            id: 2,
-            name: 'Weekly Review',
-            description: 'Reflect on the past week\'s wins and learnings',
-            schedule: { type: 'weekly', day: 'Friday', time: '4:00 PM' },
-            nextDate: new Date(new Date().setDate(new Date().getDate() + (5 - new Date().getDay()))),
-            participants: 8,
-            attendance: [],
-            streak: 3,
-            badge: '⭐'
-        },
-        {
-            id: 3,
-            name: 'Deep Work Sprint',
-            description: 'Focus blocks for coding and problem solving',
-            schedule: { type: 'custom', days: ['Mon', 'Wed', 'Fri'], time: '2:00 PM' },
-            nextDate: new Date(new Date().setHours(14, 0, 0, 0)),
-            participants: 8,
-            attendance: [],
-            streak: 7,
-            badge: '💪'
-        }
-    ])
+    const [rituals, setRituals] = useState(initialRituals || [])
     const [showCreateModal, setShowCreateModal] = useState(false)
+
+    const fetchRituals = async () => {
+        if (tribeId) {
+            try {
+                const data = await tribesAPI.getRituals(tribeId)
+                setRituals(data.rituals || [])
+            } catch (error) {
+                console.error('Failed to fetch rituals:', error)
+            }
+        }
+    }
+
+    useEffect(() => {
+        fetchRituals()
+    }, [tribeId])
     const [viewMode, setViewMode] = useState('list') // list or calendar
     const [newRitual, setNewRitual] = useState({
         name: '',
@@ -50,53 +32,53 @@ export default function RitualScheduler({ tribeId, rituals: initialRituals, curr
         days: []
     })
 
-    const handleMarkAttendance = (ritualId) => {
-        const updatedRituals = rituals.map(ritual => {
-            if (ritual.id === ritualId) {
-                const hasAttended = ritual.attendance.some(a => a.userId === currentUser._id &&
-                    new Date(a.date).toDateString() === new Date().toDateString())
+    const handleMarkAttendance = async (ritualId) => {
+        try {
+            await tribesAPI.markRitualAttendance(tribeId, ritualId)
+            await fetchRituals()
 
-                if (!hasAttended) {
-                    return {
-                        ...ritual,
-                        attendance: [...ritual.attendance, { userId: currentUser._id, date: new Date() }],
-                        streak: ritual.streak + 1
-                    }
-                }
+            if (onAttend) {
+                onAttend(ritualId)
             }
-            return ritual
-        })
-
-        setRituals(updatedRituals)
-
-        if (onAttend) {
-            onAttend(ritualId)
+        } catch (error) {
+            console.error('Failed to mark attendance:', error)
+            alert('Failed to mark attendance')
         }
     }
 
-    const handleCreateRitual = () => {
+    const handleCreateRitual = async () => {
         if (newRitual.name.trim()) {
-            const ritual = {
-                id: Date.now(),
-                ...newRitual,
-                participants: 1,
-                attendance: [],
-                streak: 0,
-                badge: '✨',
-                nextDate: new Date()
-            }
+            try {
+                // Prepare schedule object
+                const schedule = {
+                    type: newRitual.type,
+                    time: newRitual.time,
+                    days: newRitual.days
+                }
 
-            setRituals([...rituals, ritual])
-            setNewRitual({ name: '', description: '', type: 'daily', time: '09:00', days: [] })
-            setShowCreateModal(false)
+                await tribesAPI.createRitual(tribeId, {
+                    name: newRitual.name,
+                    description: newRitual.description,
+                    schedule
+                })
 
-            if (onSchedule) {
-                onSchedule(ritual)
+                await fetchRituals()
+                setNewRitual({ name: '', description: '', type: 'daily', time: '09:00', days: [] })
+                setShowCreateModal(false)
+
+                if (onSchedule) {
+                    onSchedule()
+                }
+            } catch (error) {
+                console.error('Failed to create ritual:', error)
+                alert('Failed to create ritual')
             }
         }
     }
 
-    const formatNextDate = (date) => {
+    const formatNextDate = (dateString) => {
+        if (!dateString) return 'N/A'
+        const date = new Date(dateString)
         const today = new Date()
         const tomorrow = new Date(today)
         tomorrow.setDate(tomorrow.getDate() + 1)
@@ -155,7 +137,7 @@ export default function RitualScheduler({ tribeId, rituals: initialRituals, curr
                     const attended = hasAttendedToday(ritual)
 
                     return (
-                        <Card key={ritual.id} className="hover:shadow-lg transition-shadow">
+                        <Card key={ritual._id || ritual.id} className="hover:shadow-lg transition-shadow">
                             <CardContent className="pt-6">
                                 <div className="space-y-4">
                                     {/* Header */}
@@ -206,7 +188,7 @@ export default function RitualScheduler({ tribeId, rituals: initialRituals, curr
                                         ) : (
                                             <Button
                                                 size="sm"
-                                                onClick={() => handleMarkAttendance(ritual.id)}
+                                                onClick={() => handleMarkAttendance(ritual._id || ritual.id)}
                                             >
                                                 Mark Attended
                                             </Button>

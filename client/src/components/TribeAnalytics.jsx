@@ -175,14 +175,14 @@ export default function TribeAnalytics({ tribe, members }) {
                             <div key={contrib.member._id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200">
                                 <div className="flex items-center gap-4">
                                     <div className={`flex items-center justify-center w-8 h-8 rounded-full font-bold text-sm ${index === 0 ? 'bg-yellow-100 text-yellow-700' :
-                                            index === 1 ? 'bg-gray-200 text-gray-700' :
-                                                index === 2 ? 'bg-orange-100 text-orange-700' :
-                                                    'bg-gray-100 text-gray-600'
+                                        index === 1 ? 'bg-gray-200 text-gray-700' :
+                                            index === 2 ? 'bg-orange-100 text-orange-700' :
+                                                'bg-gray-100 text-gray-600'
                                         }`}>
                                         {index + 1}
                                     </div>
                                     <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white font-medium">
-                                        {contrib.member.avatar || contrib.member.name.substring(0, 2).toUpperCase()}
+                                        {contrib.member.avatar || (contrib.member.name ? contrib.member.name.substring(0, 2).toUpperCase() : '??')}
                                     </div>
                                     <div>
                                         <p className="font-medium text-gray-900">{contrib.member.name}</p>

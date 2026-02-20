@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { Send, Smile, Paperclip, Search, MoreVertical } from 'lucide-react'
 import Card, { CardContent } from './ui/Card'
 import Button from './ui/Button'
+import { tribesAPI } from '../services/api'
 
 export default function TribeChat({ tribeId, currentUser, messages: initialMessages, onSendMessage, onReact }) {
     const [messages, setMessages] = useState(initialMessages || [])
@@ -14,8 +15,18 @@ export default function TribeChat({ tribeId, currentUser, messages: initialMessa
     const emojis = ['👍', '❤️', '😂', '🎉', '🔥', '👏', '💯', '🚀']
 
     useEffect(() => {
-        setMessages(initialMessages || [])
-    }, [initialMessages])
+        const fetchMessages = async () => {
+            if (tribeId) {
+                try {
+                    const data = await tribesAPI.getMessages(tribeId)
+                    setMessages(data.messages || [])
+                } catch (error) {
+                    console.error('Failed to fetch messages:', error)
+                }
+            }
+        }
+        fetchMessages()
+    }, [tribeId])
 
     useEffect(() => {
         scrollToBottom()
@@ -25,53 +36,43 @@ export default function TribeChat({ tribeId, currentUser, messages: initialMessa
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
     }
 
-    const handleSendMessage = () => {
+    const handleSendMessage = async () => {
         if (newMessage.trim()) {
-            const message = {
-                id: Date.now(),
-                sender: currentUser,
-                content: newMessage,
-                timestamp: new Date(),
-                reactions: [],
-                mentions: extractMentions(newMessage)
-            }
+            try {
+                const data = await tribesAPI.sendMessage(tribeId, {
+                    content: newMessage,
+                    mentions: extractMentions(newMessage)
+                })
 
-            if (onSendMessage) {
-                onSendMessage(message)
-            }
+                if (onSendMessage) {
+                    onSendMessage(data.message)
+                }
 
-            setMessages([...messages, message])
-            setNewMessage('')
-            setShowEmojiPicker(false)
+                setMessages([...messages, data.message])
+                setNewMessage('')
+                setShowEmojiPicker(false)
+            } catch (error) {
+                console.error('Failed to send message:', error)
+                alert('Failed to send message')
+            }
         }
     }
 
-    const handleReaction = (messageId, emoji) => {
-        const updatedMessages = messages.map(msg => {
-            if (msg.id === messageId) {
-                const existingReaction = msg.reactions?.find(r => r.userId === currentUser._id && r.emoji === emoji)
+    const handleReaction = async (messageId, emoji) => {
+        try {
+            const data = await tribesAPI.addReaction(tribeId, messageId, { emoji })
 
-                if (existingReaction) {
-                    // Remove reaction
-                    return {
-                        ...msg,
-                        reactions: msg.reactions.filter(r => !(r.userId === currentUser._id && r.emoji === emoji))
-                    }
-                } else {
-                    // Add reaction
-                    return {
-                        ...msg,
-                        reactions: [...(msg.reactions || []), { userId: currentUser._id, emoji, userName: currentUser.name }]
-                    }
-                }
+            // Update local state with the returned message object
+            const updatedMessages = messages.map(msg =>
+                msg._id === messageId ? data.message : msg
+            )
+            setMessages(updatedMessages)
+
+            if (onReact) {
+                onReact(messageId, emoji)
             }
-            return msg
-        })
-
-        setMessages(updatedMessages)
-
-        if (onReact) {
-            onReact(messageId, emoji)
+        } catch (error) {
+            console.error('Failed to add reaction:', error)
         }
     }
 
@@ -176,12 +177,12 @@ export default function TribeChat({ tribeId, currentUser, messages: initialMessa
 
                         return (
                             <div
-                                key={msg.id}
+                                key={msg._id || msg.id}
                                 className={`flex gap-3 ${isCurrentUser ? 'flex-row-reverse' : 'flex-row'} ${!showAvatar && !isCurrentUser ? 'ml-11' : ''}`}
                             >
                                 {showAvatar && !isCurrentUser && (
                                     <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white text-sm font-medium flex-shrink-0">
-                                        {msg.sender.avatar || msg.sender.name.substring(0, 2).toUpperCase()}
+                                        {msg.sender.avatar || (msg.sender.name ? msg.sender.name.substring(0, 2).toUpperCase() : '??')}
                                     </div>
                                 )}
 
@@ -195,8 +196,8 @@ export default function TribeChat({ tribeId, currentUser, messages: initialMessa
 
                                     <div className="group relative">
                                         <div className={`px-4 py-2 rounded-2xl ${isCurrentUser
-                                                ? 'bg-primary text-white'
-                                                : 'bg-white border border-gray-200 text-gray-900'
+                                            ? 'bg-primary text-white'
+                                            : 'bg-white border border-gray-200 text-gray-900'
                                             }`}>
                                             <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
                                                 {highlightMentions(msg.content)}
@@ -208,7 +209,7 @@ export default function TribeChat({ tribeId, currentUser, messages: initialMessa
                                             {emojis.map(emoji => (
                                                 <button
                                                     key={emoji}
-                                                    onClick={() => handleReaction(msg.id, emoji)}
+                                                    onClick={() => handleReaction(msg._id || msg.id, emoji)}
                                                     className="hover:scale-125 transition-transform text-lg"
                                                 >
                                                     {emoji}
@@ -223,7 +224,7 @@ export default function TribeChat({ tribeId, currentUser, messages: initialMessa
                                             {Object.entries(groupedReactions).map(([emoji, users]) => (
                                                 <button
                                                     key={emoji}
-                                                    onClick={() => handleReaction(msg.id, emoji)}
+                                                    onClick={() => handleReaction(msg._id || msg.id, emoji)}
                                                     className="flex items-center gap-1 bg-white border border-gray-200 rounded-full px-2 py-0.5 hover:bg-gray-50 transition-colors"
                                                     title={users.join(', ')}
                                                 >

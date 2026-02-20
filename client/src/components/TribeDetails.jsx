@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ArrowLeft, Settings, MoreVertical, Shield, Clock, Users as UsersIcon, Trophy, BookOpen, Calendar, BarChart3, Trash2 } from 'lucide-react'
+import { ArrowLeft, Settings, MoreVertical, Shield, Clock, Users as UsersIcon, Trophy, BookOpen, Calendar, BarChart3, Trash2, Target, Award } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { tribesAPI } from '../services/api'
 import Card, { CardContent } from '../components/ui/Card'
@@ -27,13 +27,18 @@ export default function TribeDetails({ tribe: initialTribe, onBack }) {
 
     // Map members to flat structure for child components
     const tribeMembers = (tribe.members || []).map(m => ({
-        ...m.user,
+        ...(m.user || {}),
         role: m.role,
         joinedAt: m.joinedAt,
-        // Mocking stats for now as they are not in the schema, but could be added later
-        tasksCompleted: Math.floor(Math.random() * 50),
-        focusTime: Math.floor(Math.random() * 500)
     }))
+
+    // Tribe stats for overview
+    const stats = [
+        { label: 'Members', value: tribe.memberCount || tribe.members?.length || 0, icon: UsersIcon, color: 'text-blue-600', bg: 'bg-blue-50' },
+        { label: 'Active Tasks', value: tribe.activeTasks || 0, icon: Target, color: 'text-purple-600', bg: 'bg-purple-50' },
+        { label: 'Focus Time', value: tribe.focusTime || '0h', icon: Clock, color: 'text-green-600', bg: 'bg-green-50' },
+        { label: 'Rituals', value: tribe.ritualsCount || 0, icon: Award, color: 'text-orange-600', bg: 'bg-orange-50' }
+    ]
 
     const handleBack = () => {
         if (onBack) {
@@ -47,7 +52,7 @@ export default function TribeDetails({ tribe: initialTribe, onBack }) {
         if (window.confirm('Are you sure you want to delete this tribe? This action cannot be undone.')) {
             try {
                 setLoading(true)
-                await tribesAPI.deleteTribe(tribe._id || tribe.id)
+                await tribesAPI.deleteTribe(tribe._id)
                 handleBack()
             } catch (error) {
                 console.error('Failed to delete tribe:', error)
@@ -60,7 +65,7 @@ export default function TribeDetails({ tribe: initialTribe, onBack }) {
 
     const handleInviteMember = async (newMember) => {
         try {
-            const updatedTribe = await tribesAPI.addMember(tribe._id || tribe.id, { email: newMember.email })
+            const updatedTribe = await tribesAPI.addMember(tribe._id, { email: newMember.email })
             setTribe(updatedTribe)
         } catch (error) {
             console.error('Failed to invite member:', error)
@@ -70,13 +75,16 @@ export default function TribeDetails({ tribe: initialTribe, onBack }) {
 
     const handleRemoveMember = async (userId) => {
         try {
-            const updatedTribe = await tribesAPI.removeMember(tribe._id || tribe.id, userId)
+            const updatedTribe = await tribesAPI.removeMember(tribe._id, userId)
             setTribe(updatedTribe)
         } catch (error) {
             console.error('Failed to remove member:', error)
             alert('Failed to remove member')
         }
     }
+
+    const rules = tribe.rules || []
+    const rituals = tribe.rituals || []
 
     return (
         <div className="space-y-6">
@@ -117,6 +125,19 @@ export default function TribeDetails({ tribe: initialTribe, onBack }) {
                 <p className="text-gray-600 mt-1">
                     {tribeMembers.length} members • Active {tribe.activeToday > 0 ? `${tribe.activeToday * 10} mins ago` : 'recently'}
                 </p>
+                <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4">
+                    {stats.map((stat, index) => (
+                        <Card key={index} className="p-4 flex items-center gap-3">
+                            <div className={`p-2 rounded-full ${stat.bg}`}>
+                                <stat.icon className={`w-5 h-5 ${stat.color}`} />
+                            </div>
+                            <div>
+                                <p className="text-sm font-medium text-gray-500">{stat.label}</p>
+                                <p className="text-lg font-semibold text-gray-900">{stat.value}</p>
+                            </div>
+                        </Card>
+                    ))}
+                </div>
             </div>
 
             {/* Tabs */}
@@ -214,24 +235,18 @@ export default function TribeDetails({ tribe: initialTribe, onBack }) {
                                 <Shield className="w-5 h-5 text-primary" />
                                 <h3 className="text-lg font-semibold text-gray-900">Rules & Expectations</h3>
                             </div>
-                            <ul className="space-y-2 text-sm text-gray-700">
-                                <li className="flex items-start gap-2">
-                                    <span className="text-primary mt-1">•</span>
-                                    <span>Attend daily standups before 10 AM.</span>
-                                </li>
-                                <li className="flex items-start gap-2">
-                                    <span className="text-primary mt-1">•</span>
-                                    <span>Update task status at the end of each sprint.</span>
-                                </li>
-                                <li className="flex items-start gap-2">
-                                    <span className="text-primary mt-1">•</span>
-                                    <span>Be respectful and supportive in peer reviews.</span>
-                                </li>
-                                <li className="flex items-start gap-2">
-                                    <span className="text-primary mt-1">•</span>
-                                    <span>Share one learning resource per week.</span>
-                                </li>
-                            </ul>
+                            {rules.length > 0 ? (
+                                <ul className="space-y-2 text-sm text-gray-700">
+                                    {rules.map((rule, index) => (
+                                        <li key={index} className="flex items-start gap-2">
+                                            <span className="text-primary mt-1">•</span>
+                                            <span>{rule}</span>
+                                        </li>
+                                    ))}
+                                </ul>
+                            ) : (
+                                <p className="text-sm text-gray-600">No rules or expectations defined yet.</p>
+                            )}
                         </CardContent>
                     </Card>
 
@@ -242,29 +257,21 @@ export default function TribeDetails({ tribe: initialTribe, onBack }) {
                                 <Clock className="w-5 h-5 text-primary" />
                                 <h3 className="text-lg font-semibold text-gray-900">Tribe Rituals</h3>
                             </div>
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
-                                    <div className="flex items-center justify-between mb-2">
-                                        <h4 className="font-semibold text-gray-900">Daily Standup</h4>
-                                        <Badge variant="default" className="text-xs">Daily</Badge>
-                                    </div>
-                                    <p className="text-sm text-gray-600">Quick 15-min sync on progress and blockers.</p>
+                            {rituals.length > 0 ? (
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    {rituals.map((ritual, index) => (
+                                        <div key={index} className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+                                            <div className="flex items-center justify-between mb-2">
+                                                <h4 className="font-semibold text-gray-900">{ritual.name}</h4>
+                                                <Badge variant="default" className="text-xs">{ritual.frequency}</Badge>
+                                            </div>
+                                            <p className="text-sm text-gray-600">{ritual.description}</p>
+                                        </div>
+                                    ))}
                                 </div>
-                                <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
-                                    <div className="flex items-center justify-between mb-2">
-                                        <h4 className="font-semibold text-gray-900">Weekly Review</h4>
-                                        <Badge variant="default" className="text-xs">Weekly</Badge>
-                                    </div>
-                                    <p className="text-sm text-gray-600">Reflect on the past week's wins and learnings.</p>
-                                </div>
-                                <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
-                                    <div className="flex items-center justify-between mb-2">
-                                        <h4 className="font-semibold text-gray-900">Deep Work Sprint</h4>
-                                        <Badge variant="default" className="text-xs">Sprint</Badge>
-                                    </div>
-                                    <p className="text-sm text-gray-600">Focus blocks for coding and problem solving.</p>
-                                </div>
-                            </div>
+                            ) : (
+                                <p className="text-sm text-gray-600">No rituals defined yet.</p>
+                            )}
                         </CardContent>
                     </Card>
 
@@ -279,7 +286,7 @@ export default function TribeDetails({ tribe: initialTribe, onBack }) {
                                 <div className="flex items-center gap-3">
                                     <div className="flex items-center gap-2">
                                         <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white text-sm font-medium">
-                                            {currentUser.avatar}
+                                            {currentUser?.avatar}
                                         </div>
                                         <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center text-white text-sm font-medium -ml-2">
                                             AC
@@ -299,27 +306,27 @@ export default function TribeDetails({ tribe: initialTribe, onBack }) {
                 {/* Chat Tab */}
                 <Tabs.Content value="chat" className="mt-6">
                     <TribeChat
-                        tribeId={tribe._id || tribe.id}
+                        tribeId={tribe._id}
                         currentUser={currentUser}
-                        messages={[]} // Chat would be fetched by TribeChat component ideally
+                        onSendMessage={(msg) => console.log('Sent:', msg)}
                     />
                 </Tabs.Content>
 
                 {/* Members Tab */}
                 <Tabs.Content value="members" className="mt-6">
                     <TribeMembers
-                        tribeId={tribe._id || tribe.id}
-                        members={tribeMembers}
+                        tribeId={tribe._id}
+                        members={tribe.members}
                         currentUser={currentUser}
-                        onInvite={handleInviteMember}
-                        onRemove={handleRemoveMember}
+                        onInvite={(email) => tribesAPI.addMember(tribe._id, email)}
+                        onRemove={(userId) => tribesAPI.removeMember(tribe._id, userId)}
                     />
                 </Tabs.Content>
 
                 {/* Problem Solving Tab */}
                 <Tabs.Content value="problem-solving" className="mt-6">
                     <ProblemSolvingBoard
-                        tribeId={tribe._id || tribe.id}
+                        tribeId={tribe._id}
                         problems={[]} // Problems should be fetched by the component
                         currentUser={currentUser}
                     />
@@ -328,7 +335,7 @@ export default function TribeDetails({ tribe: initialTribe, onBack }) {
                 {/* Buddy Mode Tab */}
                 <Tabs.Content value="buddy" className="mt-6">
                     <BuddyMode
-                        tribeId={tribe.id}
+                        tribeId={tribe._id}
                         members={tribeMembers}
                         currentUser={currentUser}
                     />
@@ -337,8 +344,9 @@ export default function TribeDetails({ tribe: initialTribe, onBack }) {
                 {/* Rituals Tab */}
                 <Tabs.Content value="rituals" className="mt-6">
                     <RitualScheduler
-                        tribeId={tribe.id}
+                        tribeId={tribe._id}
                         currentUser={currentUser}
+                        onSchedule={() => console.log('Ritual scheduled')}
                     />
                 </Tabs.Content>
 

@@ -3,30 +3,43 @@ import { Users, Play, Pause, StopCircle, MessageCircle, Clock, Target, Award } f
 import Card, { CardContent } from './ui/Card'
 import Button from './ui/Button'
 import Badge from './ui/Badge'
+import { tribesAPI } from '../services/api'
 
 export default function BuddyMode({ tribeId, members, currentUser, onStartSession, onEndSession }) {
     const [activeBuddy, setActiveBuddy] = useState(null)
-    const [sessionStatus, setSessionStatus] = useState('inactive') // inactive, active, paused
+    const [sessionStatus, setSessionStatus] = useState('inactive')
     const [sessionTime, setSessionTime] = useState(0)
     const [showFindBuddy, setShowFindBuddy] = useState(false)
     const [buddyMessage, setBuddyMessage] = useState('')
     const [chatMessages, setChatMessages] = useState([])
-    const [sessionHistory, setSessionHistory] = useState([
-        {
-            id: 1,
-            buddy: { name: 'Alex Chen', avatar: 'AC' },
-            duration: 120,
-            tasksCompleted: 3,
-            date: new Date(Date.now() - 86400000)
-        },
-        {
-            id: 2,
-            buddy: { name: 'Sarah Johnson', avatar: 'SJ' },
-            duration: 90,
-            tasksCompleted: 2,
-            date: new Date(Date.now() - 172800000)
+    const [sessionHistory, setSessionHistory] = useState([])
+    const [activeSession, setActiveSession] = useState(null)
+
+    const fetchSessionData = async () => {
+        if (tribeId) {
+            try {
+                const active = await tribesAPI.getActiveBuddySession(tribeId)
+                if (active && active.session) {
+                    setActiveSession(active.session)
+                    setActiveBuddy(active.session.buddy)
+                    setSessionStatus(active.session.status)
+                    // Calculate session time if it's been running
+                    const startTime = new Date(active.session.startTime).getTime()
+                    const now = new Date().getTime()
+                    setSessionTime(Math.floor((now - startTime) / 1000))
+                }
+
+                const history = await tribesAPI.getBuddySessionHistory(tribeId)
+                setSessionHistory(history.sessions || [])
+            } catch (error) {
+                console.error('Failed to fetch buddy session data:', error)
+            }
         }
-    ])
+    }
+
+    useEffect(() => {
+        fetchSessionData()
+    }, [tribeId])
 
     useEffect(() => {
         let interval
@@ -45,39 +58,51 @@ export default function BuddyMode({ tribeId, members, currentUser, onStartSessio
         return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
     }
 
-    const handleStartSession = (buddy) => {
-        setActiveBuddy(buddy)
-        setSessionStatus('active')
-        setSessionTime(0)
-        setShowFindBuddy(false)
+    const handleStartSession = async (buddy) => {
+        try {
+            const data = await tribesAPI.startBuddySession(tribeId, { buddyId: buddy._id })
+            setActiveSession(data.session)
+            setActiveBuddy(buddy)
+            setSessionStatus('active')
+            setSessionTime(0)
+            setShowFindBuddy(false)
 
-        if (onStartSession) {
-            onStartSession(buddy)
+            if (onStartSession) {
+                onStartSession(buddy)
+            }
+        } catch (error) {
+            console.error('Failed to start session:', error)
+            alert('Failed to start session')
         }
     }
 
-    const handleTogglePause = () => {
-        setSessionStatus(sessionStatus === 'active' ? 'paused' : 'active')
+    const handleTogglePause = async () => {
+        const newStatus = sessionStatus === 'active' ? 'paused' : 'active'
+        try {
+            await tribesAPI.updateBuddySessionStatus(tribeId, activeSession._id, { status: newStatus })
+            setSessionStatus(newStatus)
+        } catch (error) {
+            console.error('Failed to update session status:', error)
+        }
     }
 
-    const handleEndSession = () => {
+    const handleEndSession = async () => {
         if (window.confirm('End buddy session?')) {
-            const newSession = {
-                id: Date.now(),
-                buddy: activeBuddy,
-                duration: Math.floor(sessionTime / 60),
-                tasksCompleted: 0,
-                date: new Date()
-            }
+            try {
+                await tribesAPI.endBuddySession(tribeId, activeSession._id)
+                await fetchSessionData() // Refresh history and clear active session
+                setActiveBuddy(null)
+                setActiveSession(null)
+                setSessionStatus('inactive')
+                setSessionTime(0)
+                setChatMessages([])
 
-            setSessionHistory([newSession, ...sessionHistory])
-            setActiveBuddy(null)
-            setSessionStatus('inactive')
-            setSessionTime(0)
-            setChatMessages([])
-
-            if (onEndSession) {
-                onEndSession(newSession)
+                if (onEndSession) {
+                    onEndSession()
+                }
+            } catch (error) {
+                console.error('Failed to end session:', error)
+                alert('Failed to end session')
             }
         }
     }
@@ -108,11 +133,11 @@ export default function BuddyMode({ tribeId, members, currentUser, onStartSessio
                                 <div className="flex items-center gap-4">
                                     <div className="flex items-center gap-2">
                                         <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white font-bold">
-                                            {currentUser.avatar || currentUser.name.substring(0, 2).toUpperCase()}
+                                            {currentUser?.avatar || (currentUser?.name ? currentUser.name.substring(0, 2).toUpperCase() : '??')}
                                         </div>
                                         <Users className="w-6 h-6 text-primary" />
                                         <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-blue-500 rounded-full flex items-center justify-center text-white font-bold">
-                                            {activeBuddy.avatar || activeBuddy.name.substring(0, 2).toUpperCase()}
+                                            {activeBuddy.avatar || (activeBuddy.name ? activeBuddy.name.substring(0, 2).toUpperCase() : '??')}
                                         </div>
                                     </div>
                                     <div>
@@ -168,8 +193,8 @@ export default function BuddyMode({ tribeId, members, currentUser, onStartSessio
                                             chatMessages.map(msg => (
                                                 <div key={msg.id} className={`text-sm ${msg.sender._id === currentUser._id ? 'text-right' : 'text-left'}`}>
                                                     <span className={`inline-block px-3 py-2 rounded-lg ${msg.sender._id === currentUser._id
-                                                            ? 'bg-primary text-white'
-                                                            : 'bg-white border border-gray-200'
+                                                        ? 'bg-primary text-white'
+                                                        : 'bg-white border border-gray-200'
                                                         }`}>
                                                         {msg.content}
                                                     </span>
@@ -237,7 +262,7 @@ export default function BuddyMode({ tribeId, members, currentUser, onStartSessio
                                 <div key={session.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200">
                                     <div className="flex items-center gap-3">
                                         <div className="w-10 h-10 bg-gradient-to-br from-green-500 to-blue-500 rounded-full flex items-center justify-center text-white font-medium">
-                                            {session.buddy.avatar}
+                                            {session.buddy.avatar || (session.buddy.name ? session.buddy.name.substring(0, 2).toUpperCase() : '??')}
                                         </div>
                                         <div>
                                             <p className="font-medium text-gray-900">{session.buddy.name}</p>
@@ -292,7 +317,7 @@ export default function BuddyMode({ tribeId, members, currentUser, onStartSessio
                                             <div className="flex items-center gap-3">
                                                 <div className="relative">
                                                     <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white font-bold">
-                                                        {buddy.avatar || buddy.name.substring(0, 2).toUpperCase()}
+                                                        {buddy.avatar || (buddy.name ? buddy.name.substring(0, 2).toUpperCase() : '??')}
                                                     </div>
                                                     <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-green-500 rounded-full border-2 border-white" />
                                                 </div>
