@@ -49,6 +49,7 @@ export const authAPI = {
     login: (data) => api.post('/auth/login', data),
     logout: () => api.post('/auth/logout'),
     getCurrentUser: () => api.get('/auth/me'),
+    updateProfile: (data) => api.put('/auth/profile', data),
 };
 
 // Real Tasks API

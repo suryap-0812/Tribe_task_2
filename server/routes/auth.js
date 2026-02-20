@@ -138,4 +138,47 @@ router.get('/me', protect, async (req, res) => {
     }
 });
 
+// @route   PUT /api/auth/profile
+// @desc    Update user profile
+// @access  Private
+router.put(
+    '/profile',
+    protect,
+    [
+        body('name').optional().trim().notEmpty().withMessage('Name cannot be empty'),
+        body('email').optional().isEmail().normalizeEmail().withMessage('Valid email is required'),
+        body('dailyFocusGoal').optional().isNumeric().withMessage('Daily focus goal must be a number'),
+    ],
+    async (req, res) => {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) {
+            return res.status(400).json({ errors: errors.array() });
+        }
+
+        const { name, email, dailyFocusGoal } = req.body;
+
+        try {
+            const user = await User.findById(req.user._id);
+
+            if (name) user.name = name;
+            if (email) {
+                // Check if email already exists for another user
+                const existingUser = await User.findOne({ email });
+                if (existingUser && existingUser._id.toString() !== req.user._id.toString()) {
+                    return res.status(400).json({ message: 'Email already in use' });
+                }
+                user.email = email;
+            }
+            if (dailyFocusGoal !== undefined) user.dailyFocusGoal = dailyFocusGoal;
+
+            await user.save();
+
+            res.json(formatUser(user));
+        } catch (error) {
+            console.error('Update profile error:', error);
+            res.status(500).json({ message: 'Server error' });
+        }
+    }
+);
+
 export default router;
