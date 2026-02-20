@@ -213,26 +213,34 @@ export default function MyTribes() {
                     <Card key={tribe.id} className="hover:shadow-lg transition-shadow">
                         <CardContent>
                             <div className="flex items-start gap-3 mb-4">
-                                <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${tribe.color === 'blue' ? 'bg-blue-100' :
-                                    tribe.color === 'purple' ? 'bg-purple-100' :
-                                        'bg-green-100'
+                                <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${tribe.color === 'blue' ? 'bg-blue-100 text-blue-600' :
+                                    tribe.color === 'purple' ? 'bg-purple-100 text-purple-600' :
+                                        tribe.color === 'green' ? 'bg-green-100 text-green-600' :
+                                            tribe.color === 'red' ? 'bg-red-100 text-red-600' :
+                                                tribe.color === 'orange' ? 'bg-orange-100 text-orange-600' :
+                                                    tribe.color === 'pink' ? 'bg-pink-100 text-pink-600' :
+                                                        tribe.color === 'indigo' ? 'bg-indigo-100 text-indigo-600' :
+                                                            tribe.color === 'teal' ? 'bg-teal-100 text-teal-600' :
+                                                                'bg-yellow-100 text-yellow-600'
                                     }`}>
-                                    <Users className={`w-6 h-6 ${tribe.color === 'blue' ? 'text-blue-600' :
-                                        tribe.color === 'purple' ? 'text-purple-600' :
-                                            'text-green-600'
-                                        }`} />
+                                    <Users className="w-6 h-6" />
                                 </div>
                                 <div className="flex-1 min-w-0">
-                                    <h3 className="font-semibold text-gray-900">{tribe.name}</h3>
-                                    <p className="text-sm text-gray-600">{tribe.description}</p>
+                                    <div className="flex items-center gap-2">
+                                        <h3 className="font-semibold text-gray-900 truncate">{tribe.name}</h3>
+                                        <Badge variant="secondary" className="text-[10px] py-0 px-1.5 h-4 bg-gray-100 text-gray-600 border-none">
+                                            {tribe.category || 'General'}
+                                        </Badge>
+                                    </div>
+                                    <p className="text-sm text-gray-600 truncate">{tribe.description}</p>
                                 </div>
                             </div>
 
                             {/* Active Members Indicator */}
                             <div className="flex items-center gap-1 mb-4">
-                                <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                                <span className="text-sm text-blue-600 font-medium">
-                                    {tribe.activeToday} {tribe.activeToday === 1 ? 'member' : 'members'} active today
+                                <div className={`w-2 h-2 rounded-full ${(tribe.activeToday || 0) > 0 ? 'bg-green-500' : 'bg-gray-300'}`}></div>
+                                <span className={`text-sm font-medium ${(tribe.activeToday || 0) > 0 ? 'text-green-600' : 'text-gray-500'}`}>
+                                    {(tribe.activeToday || 0)} members active today
                                 </span>
                             </div>
 

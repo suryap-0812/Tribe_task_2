@@ -34,6 +34,27 @@ const tribeSchema = new mongoose.Schema(
             default: 'blue',
             enum: ['blue', 'purple', 'green', 'red', 'orange', 'pink', 'yellow', 'indigo', 'teal'],
         },
+        category: {
+            type: String,
+            default: 'General',
+            enum: ['Coding', 'Fitness', 'Study', 'Health', 'General', 'Design', 'Business', 'Other'],
+        },
+        isPrivate: {
+            type: Boolean,
+            default: false,
+        },
+        rules: [
+            {
+                type: String,
+                trim: true,
+            },
+        ],
+        goals: [
+            {
+                type: String,
+                trim: true,
+            },
+        ],
         createdBy: {
             type: mongoose.Schema.Types.ObjectId,
             ref: 'User',

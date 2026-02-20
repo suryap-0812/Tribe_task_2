@@ -121,8 +121,22 @@ export default function TribeDetails({ tribe: initialTribe, onBack }) {
 
             {/* Tribe Info */}
             <div>
-                <h1 className="text-3xl font-bold text-gray-900">{tribe.name}</h1>
-                <p className="text-gray-600 mt-1">
+                <div className="flex items-center gap-3">
+                    <h1 className="text-3xl font-bold text-gray-900">{tribe.name}</h1>
+                    <Badge variant="secondary" className="bg-primary/10 text-primary border-none">
+                        {tribe.category || 'General'}
+                    </Badge>
+                    {tribe.isPrivate && (
+                        <Badge variant="outline" className="text-gray-500 border-gray-300">
+                            <Shield className="w-3 h-3 mr-1" />
+                            Private
+                        </Badge>
+                    )}
+                </div>
+                {tribe.description && (
+                    <p className="text-gray-600 mt-2 max-w-2xl">{tribe.description}</p>
+                )}
+                <p className="text-sm text-gray-500 mt-1">
                     {tribeMembers.length} members • Active {tribe.activeToday > 0 ? `${tribe.activeToday * 10} mins ago` : 'recently'}
                 </p>
                 <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -246,6 +260,30 @@ export default function TribeDetails({ tribe: initialTribe, onBack }) {
                                 </ul>
                             ) : (
                                 <p className="text-sm text-gray-600">No rules or expectations defined yet.</p>
+                            )}
+                        </CardContent>
+                    </Card>
+
+                    {/* Tribe Goals */}
+                    <Card>
+                        <CardContent className="pt-6">
+                            <div className="flex items-center gap-2 mb-4">
+                                <Target className="w-5 h-5 text-primary" />
+                                <h3 className="text-lg font-semibold text-gray-900">Tribe Goals</h3>
+                            </div>
+                            {(tribe.goals || []).length > 0 ? (
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                    {(tribe.goals || []).map((goal, index) => (
+                                        <div key={index} className="flex items-center gap-3 p-3 bg-primary/5 rounded-lg border border-primary/10">
+                                            <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-primary text-xs font-bold">
+                                                {index + 1}
+                                            </div>
+                                            <span className="text-sm text-gray-800 font-medium">{goal}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <p className="text-sm text-gray-600">No primary goals defined yet.</p>
                             )}
                         </CardContent>
                     </Card>

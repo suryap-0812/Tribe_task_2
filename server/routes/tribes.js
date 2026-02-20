@@ -132,6 +132,8 @@ router.post(
     [
         body('name').trim().notEmpty().withMessage('Tribe name is required'),
         body('color').optional().isIn(['blue', 'purple', 'green', 'red', 'orange', 'pink', 'yellow', 'indigo', 'teal']),
+        body('category').optional().isIn(['Coding', 'Fitness', 'Study', 'Health', 'General', 'Design', 'Business', 'Other']),
+        body('isPrivate').optional().isBoolean(),
     ],
     async (req, res) => {
         const errors = validationResult(req);
@@ -146,9 +148,13 @@ router.post(
                     name: req.body.name,
                     description: req.body.description,
                     color: req.body.color || 'blue',
+                    category: req.body.category || 'General',
+                    isPrivate: req.body.isPrivate || false,
+                    rules: req.body.rules || [],
+                    goals: req.body.goals || [],
                     members: [req.user._id],
                     admin: req.user._id,
-                    isPrivate: false,
+                    isPrivate: req.body.isPrivate || false,
                     createdAt: new Date().toISOString(),
                     updatedAt: new Date().toISOString()
                 };
@@ -160,6 +166,10 @@ router.post(
                 name: req.body.name,
                 description: req.body.description,
                 color: req.body.color || 'blue',
+                category: req.body.category || 'General',
+                isPrivate: req.body.isPrivate || false,
+                rules: req.body.rules || [],
+                goals: req.body.goals || [],
                 createdBy: req.user._id,
                 members: [
                     {

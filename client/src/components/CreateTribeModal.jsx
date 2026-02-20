@@ -23,6 +23,10 @@ export default function CreateTribeModal({ open, onOpenChange, onCreateTribe }) 
         name: '',
         description: '',
         color: 'blue',
+        category: 'General',
+        isPrivate: false,
+        rules: '',
+        goals: '',
     })
 
     const handleSubmit = async (e) => {
@@ -38,7 +42,11 @@ export default function CreateTribeModal({ open, onOpenChange, onCreateTribe }) 
             await tribesAPI.createTribe({
                 name: formData.name,
                 description: formData.description,
-                color: formData.color
+                color: formData.color,
+                category: formData.category,
+                isPrivate: formData.isPrivate,
+                rules: formData.rules.split('\n').filter(r => r.trim()),
+                goals: formData.goals.split('\n').filter(g => g.trim()),
             })
 
             onCreateTribe() // This will trigger reload in parent
@@ -48,6 +56,10 @@ export default function CreateTribeModal({ open, onOpenChange, onCreateTribe }) 
                 name: '',
                 description: '',
                 color: 'blue',
+                category: 'General',
+                isPrivate: false,
+                rules: '',
+                goals: '',
             })
             onOpenChange(false)
         } catch (error) {
@@ -60,7 +72,7 @@ export default function CreateTribeModal({ open, onOpenChange, onCreateTribe }) 
 
     return (
         <Modal open={open} onOpenChange={onOpenChange} title="Create New Tribe">
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-4 max-h-[70vh] overflow-y-auto px-1">
                 {/* Tribe Name */}
                 <div>
                     <Label htmlFor="tribeName">
@@ -79,6 +91,53 @@ export default function CreateTribeModal({ open, onOpenChange, onCreateTribe }) 
                     <p className="text-xs text-gray-500 mt-1">{formData.name.length}/50 characters</p>
                 </div>
 
+                <div className="grid grid-cols-2 gap-4">
+                    {/* Category */}
+                    <div>
+                        <Label htmlFor="tribeCategory">Category</Label>
+                        <select
+                            id="tribeCategory"
+                            value={formData.category}
+                            onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                            disabled={loading}
+                            className="mt-1 w-full px-3 py-2 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 text-sm"
+                        >
+                            {['Coding', 'Fitness', 'Study', 'Health', 'General', 'Design', 'Business', 'Other'].map(cat => (
+                                <option key={cat} value={cat}>{cat}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    {/* Privacy */}
+                    <div>
+                        <Label>Privacy</Label>
+                        <div className="flex items-center gap-4 mt-2 h-9">
+                            <label className="flex items-center gap-2 cursor-pointer">
+                                <input
+                                    type="radio"
+                                    name="privacy"
+                                    checked={!formData.isPrivate}
+                                    onChange={() => setFormData({ ...formData, isPrivate: false })}
+                                    disabled={loading}
+                                    className="w-4 h-4 text-primary"
+                                />
+                                <span className="text-sm">Public</span>
+                            </label>
+                            <label className="flex items-center gap-2 cursor-pointer">
+                                <input
+                                    type="radio"
+                                    name="privacy"
+                                    checked={formData.isPrivate}
+                                    onChange={() => setFormData({ ...formData, isPrivate: true })}
+                                    disabled={loading}
+                                    className="w-4 h-4 text-primary"
+                                />
+                                <span className="text-sm">Private</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
                 {/* Description */}
                 <div>
                     <Label htmlFor="tribeDescription">Description</Label>
@@ -88,31 +147,58 @@ export default function CreateTribeModal({ open, onOpenChange, onCreateTribe }) 
                         value={formData.description}
                         onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                         className="mt-1"
-                        rows={3}
+                        rows={2}
                         maxLength={200}
                         disabled={loading}
                     />
                     <p className="text-xs text-gray-500 mt-1">{formData.description.length}/200 characters</p>
                 </div>
 
+                {/* Rules & Goals */}
+                <div className="grid grid-cols-2 gap-4">
+                    <div>
+                        <Label htmlFor="tribeRules">Rules (one per line)</Label>
+                        <Textarea
+                            id="tribeRules"
+                            placeholder="Be respectful&#10;Daily updates"
+                            value={formData.rules}
+                            onChange={(e) => setFormData({ ...formData, rules: e.target.value })}
+                            className="mt-1 text-sm"
+                            rows={3}
+                            disabled={loading}
+                        />
+                    </div>
+                    <div>
+                        <Label htmlFor="tribeGoals">Goals (one per line)</Label>
+                        <Textarea
+                            id="tribeGoals"
+                            placeholder="Launch MVP&#10;Lose 5kg"
+                            value={formData.goals}
+                            onChange={(e) => setFormData({ ...formData, goals: e.target.value })}
+                            className="mt-1 text-sm"
+                            rows={3}
+                            disabled={loading}
+                        />
+                    </div>
+                </div>
+
                 {/* Color Selection */}
                 <div>
                     <Label>Tribe Color</Label>
-                    <p className="text-xs text-gray-500 mb-2">Choose a color to represent your tribe</p>
-                    <div className="grid grid-cols-4 gap-2">
+                    <div className="grid grid-cols-3 md:grid-cols-5 gap-2 mt-2">
                         {TRIBE_COLORS.map((color) => (
                             <button
                                 key={color.value}
                                 type="button"
                                 onClick={() => setFormData({ ...formData, color: color.value })}
                                 disabled={loading}
-                                className={`flex items-center gap-2 p-2 rounded-lg border-2 transition-all ${formData.color === color.value
+                                className={`flex flex-col items-center gap-1 p-2 rounded-lg border-2 transition-all ${formData.color === color.value
                                     ? 'border-primary bg-primary-50'
                                     : 'border-gray-200 hover:border-gray-300'
                                     }`}
                             >
-                                <div className={`w-6 h-6 rounded-full ${color.class}`} />
-                                <span className="text-sm font-medium text-gray-700">{color.name}</span>
+                                <div className={`w-5 h-5 rounded-full ${color.class}`} />
+                                <span className="text-[10px] font-medium text-gray-600">{color.name}</span>
                             </button>
                         ))}
                     </div>
@@ -120,13 +206,13 @@ export default function CreateTribeModal({ open, onOpenChange, onCreateTribe }) 
 
                 {/* Info Box */}
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                    <p className="text-sm text-blue-800">
-                        💡 <strong>Tip:</strong> You'll be the tribe leader and can invite members after creation.
+                    <p className="text-xs text-blue-800">
+                        💡 <strong>Tip:</strong> New members will see these rules and goals when they join.
                     </p>
                 </div>
 
                 {/* Actions */}
-                <div className="flex justify-end gap-3 pt-4">
+                <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
                     <ModalClose asChild>
                         <Button type="button" variant="ghost" disabled={loading}>
                             Cancel
