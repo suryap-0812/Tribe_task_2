@@ -1,17 +1,40 @@
-import { useState } from 'react'
-import { CheckCircle2, Calendar, Users, Flag, Filter, SortAsc } from 'lucide-react'
+import { useState, useEffect, useCallback } from 'react'
+import { CheckCircle2, Calendar, Users, Flag, Filter, SortAsc, Loader2 } from 'lucide-react'
 import Card, { CardHeader, CardTitle, CardContent } from '../components/ui/Card'
 import Badge from '../components/ui/Badge'
 import Select, { SelectTrigger, SelectContent, SelectItem, SelectValue } from '../components/ui/Select'
-import { tasks } from '../data/mockData'
+import { tasksAPI, tribesAPI } from '../services/api'
 
 export default function Analytics() {
     const [sortBy, setSortBy] = useState('completedAt')
     const [filterPriority, setFilterPriority] = useState('all')
     const [filterTribe, setFilterTribe] = useState('all')
+    const [allTasks, setAllTasks] = useState([])
+    const [userTribes, setUserTribes] = useState([])
+    const [loading, setLoading] = useState(true)
+
+    const fetchData = useCallback(async () => {
+        try {
+            setLoading(true)
+            const [tasksData, tribesData] = await Promise.all([
+                tasksAPI.getTasks({ status: 'completed' }),
+                tribesAPI.getTribes()
+            ])
+            setAllTasks(Array.isArray(tasksData) ? tasksData : [])
+            setUserTribes(Array.isArray(tribesData) ? tribesData : [])
+        } catch (error) {
+            console.error('Failed to fetch analytics data:', error)
+        } finally {
+            setLoading(false)
+        }
+    }, [])
+
+    useEffect(() => {
+        fetchData()
+    }, [fetchData])
 
     // Get completed tasks
-    let completedTasks = tasks.filter(task => task.completed)
+    let completedTasks = allTasks.filter(task => task.completed)
 
     // Filter by priority
     if (filterPriority !== 'all') {
@@ -20,7 +43,10 @@ export default function Analytics() {
 
     // Filter by tribe
     if (filterTribe !== 'all') {
-        completedTasks = completedTasks.filter(task => task.tribe === filterTribe)
+        completedTasks = completedTasks.filter(task => {
+            const tribeId = task.tribe?._id || task.tribe
+            return tribeId === filterTribe
+        })
     }
 
     // Sort tasks
@@ -36,8 +62,11 @@ export default function Analytics() {
         return 0
     })
 
-    // Get unique tribes
-    const tribes = [...new Set(tasks.map(task => task.tribe))]
+    // Get unique tribes from completed tasks (for fallback)
+    const uniqueTribes = [...new Set(allTasks
+        .filter(t => t.tribe)
+        .map(task => task.tribe?.name || task.tribeName || (typeof task.tribe === 'string' ? task.tribe : 'Unknown'))
+    )]
 
     // Calculate stats
     const totalCompleted = completedTasks.length
@@ -48,12 +77,23 @@ export default function Analytics() {
         return new Date(t.completedAt) > weekAgo
     }).length
 
+    if (loading) {
+        return (
+            <div className="flex flex-col items-center justify-center h-[400px]">
+                <Loader2 className="w-8 h-8 text-primary animate-spin mb-4" />
+                <p className="text-gray-500">Loading your production analytics...</p>
+            </div>
+        )
+    }
+
     return (
         <div className="space-y-6">
             {/* Header */}
-            <div>
-                <h1 className="text-3xl font-bold text-gray-900">Analytics</h1>
-                <p className="text-gray-600 mt-1">Track your productivity and completed tasks</p>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                    <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Analytics</h1>
+                    <p className="text-sm sm:text-base text-gray-600 mt-1">Track your productivity and completed tasks</p>
+                </div>
             </div>
 
             {/* Stats Cards */}
@@ -97,37 +137,43 @@ export default function Analytics() {
 
             {/* Filters and Sort */}
             <Card>
-                <div className="flex flex-wrap items-center gap-4">
-                    <div className="flex items-center gap-2">
-                        <Filter className="w-4 h-4 text-gray-400" />
-                        <span className="text-sm font-medium text-gray-700">Filter:</span>
+                <div className="flex flex-col lg:flex-row lg:items-center gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 flex-1">
+                        <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-2 min-w-fit">
+                                <Filter className="w-4 h-4 text-gray-400" />
+                                <span className="text-sm font-medium text-gray-700">Filter:</span>
+                            </div>
+                            <Select value={filterPriority} onValueChange={setFilterPriority}>
+                                <SelectTrigger className="flex-1 h-9">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">All Priorities</SelectItem>
+                                    <SelectItem value="high">High</SelectItem>
+                                    <SelectItem value="medium">Medium</SelectItem>
+                                    <SelectItem value="low">Low</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+
+                        <div className="flex items-center gap-3">
+                            <span className="text-sm font-medium text-gray-700 sm:hidden">Tribe:</span>
+                            <Select value={filterTribe} onValueChange={setFilterTribe}>
+                                <SelectTrigger className="flex-1 h-9">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">All Tribes</SelectItem>
+                                    {userTribes.map(tribe => (
+                                        <SelectItem key={tribe._id} value={tribe._id}>{tribe.name}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
                     </div>
 
-                    <Select value={filterPriority} onValueChange={setFilterPriority}>
-                        <SelectTrigger className="w-[140px] h-9">
-                            <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="all">All Priorities</SelectItem>
-                            <SelectItem value="high">High</SelectItem>
-                            <SelectItem value="medium">Medium</SelectItem>
-                            <SelectItem value="low">Low</SelectItem>
-                        </SelectContent>
-                    </Select>
-
-                    <Select value={filterTribe} onValueChange={setFilterTribe}>
-                        <SelectTrigger className="w-[140px] h-9">
-                            <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="all">All Tribes</SelectItem>
-                            {tribes.map(tribe => (
-                                <SelectItem key={tribe} value={tribe}>{tribe}</SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
-
-                    <div className="flex items-center gap-2 ml-auto">
+                    <div className="flex items-center gap-2 sm:ml-auto border-t lg:border-t-0 pt-4 lg:pt-0">
                         <SortAsc className="w-4 h-4 text-gray-400" />
                         <span className="text-sm font-medium text-gray-700">Sort by:</span>
                         <Select value={sortBy} onValueChange={setSortBy}>
@@ -178,28 +224,32 @@ export default function Analytics() {
 
                                                     <div className="flex items-center gap-1">
                                                         <Users className="w-3 h-3" />
-                                                        <span>Tribe: {task.tribe}</span>
+                                                        <span>Tribe: {task.tribe?.name || 'Personal'}</span>
                                                     </div>
 
-                                                    <div className="flex items-center gap-1">
-                                                        <Calendar className="w-3 h-3" />
-                                                        <span>Due: {task.dueDate.toLocaleDateString('en-US', {
-                                                            month: 'short',
-                                                            day: 'numeric',
-                                                            year: 'numeric'
-                                                        })}</span>
-                                                    </div>
+                                                    {task.dueDate && (
+                                                        <div className="flex items-center gap-1">
+                                                            <Calendar className="w-3 h-3" />
+                                                            <span>Due: {new Date(task.dueDate).toLocaleDateString('en-US', {
+                                                                month: 'short',
+                                                                day: 'numeric',
+                                                                year: 'numeric'
+                                                            })}</span>
+                                                        </div>
+                                                    )}
 
-                                                    <div className="flex items-center gap-1">
-                                                        <CheckCircle2 className="w-3 h-3" />
-                                                        <span>Completed: {task.completedAt.toLocaleDateString('en-US', {
-                                                            month: 'short',
-                                                            day: 'numeric',
-                                                            year: 'numeric',
-                                                            hour: '2-digit',
-                                                            minute: '2-digit'
-                                                        })}</span>
-                                                    </div>
+                                                    {task.completedAt && (
+                                                        <div className="flex items-center gap-1">
+                                                            <CheckCircle2 className="w-3 h-3" />
+                                                            <span>Completed: {new Date(task.completedAt).toLocaleDateString('en-US', {
+                                                                month: 'short',
+                                                                day: 'numeric',
+                                                                year: 'numeric',
+                                                                hour: '2-digit',
+                                                                minute: '2-digit'
+                                                            })}</span>
+                                                        </div>
+                                                    )}
                                                 </div>
                                             </div>
                                         </div>

@@ -46,11 +46,18 @@ export default function PendingTasks() {
     }
 
     const handleCompleteTask = async (taskId) => {
+        // Optimistic update: mark as completed locally
+        setTasks(prev => prev.map(t =>
+            (t._id || t.id) === taskId ? { ...t, completed: true } : t
+        ))
+
         try {
             await tasksAPI.completeTask(taskId)
             fetchTasks()
         } catch (error) {
             console.error('Error completing task:', error)
+            // Revert on error
+            fetchTasks()
         }
     }
 
@@ -266,11 +273,11 @@ export default function PendingTasks() {
             ) : (
                 <div className="space-y-3">
                     {filteredTasks.map((task) => (
-                        <Card key={task.id} className="p-4 hover:shadow-md transition-shadow">
+                        <Card key={task._id || task.id} className="p-4 hover:shadow-md transition-shadow">
                             <div className="flex items-start gap-4">
                                 {/* Checkbox */}
                                 <button
-                                    onClick={() => handleCompleteTask(task.id)}
+                                    onClick={() => handleCompleteTask(task._id || task.id)}
                                     className="mt-1 w-5 h-5 rounded border-2 border-gray-300 hover:border-primary flex items-center justify-center transition-colors"
                                 >
                                     {task.completed && <Check className="w-3 h-3 text-primary" />}
@@ -330,13 +337,13 @@ export default function PendingTasks() {
                                         {/* Actions */}
                                         <div className="flex items-center gap-2">
                                             <button
-                                                onClick={() => handleToggleStar(task.id)}
+                                                onClick={() => handleToggleStar(task._id || task.id)}
                                                 className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
                                             >
                                                 <Star className={`w-4 h-4 ${task.starred ? 'fill-yellow-500 text-yellow-500' : 'text-gray-400'}`} />
                                             </button>
                                             <button
-                                                onClick={() => handleDeleteTask(task.id)}
+                                                onClick={() => handleDeleteTask(task._id || task.id)}
                                                 className="p-2 hover:bg-red-50 rounded-lg transition-colors"
                                             >
                                                 <Trash2 className="w-4 h-4 text-gray-400 hover:text-red-600" />
