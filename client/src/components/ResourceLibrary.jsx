@@ -5,7 +5,7 @@ import Button from './ui/Button'
 import Badge from './ui/Badge'
 import { tribesAPI } from '../services/api'
 
-export default function ResourceLibrary({ tribeId, currentUser }) {
+export default function ResourceLibrary({ tribeId, currentUser, isLeader, onUpload }) {
     const [resources, setResources] = useState([])
     const [loading, setLoading] = useState(true)
     const [searchQuery, setSearchQuery] = useState('')
@@ -90,6 +90,7 @@ export default function ResourceLibrary({ tribeId, currentUser }) {
                 setResources([response.resource, ...resources])
                 setNewResource({ name: '', type: 'document', url: '', category: '', description: '' })
                 setShowUploadModal(false)
+                if (onUpload) onUpload()
             } catch (error) {
                 console.error('Failed to upload resource:', error)
                 alert('Failed to upload resource')
@@ -230,7 +231,7 @@ export default function ResourceLibrary({ tribeId, currentUser }) {
                                                     <Download className="w-4 h-4" />
                                                 </button>
                                             )}
-                                            {(resource.uploader?._id === currentUser?._id || resource.uploader === currentUser?._id) && (
+                                            {(resource.uploader?._id === currentUser?._id || resource.uploader === currentUser?._id || isLeader) && (
                                                 <button
                                                     onClick={() => handleDeleteResource(resource._id || resource.id)}
                                                     className="text-red-600 hover:text-red-700 transition-colors"

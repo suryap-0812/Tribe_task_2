@@ -1,5 +1,6 @@
 import express from 'express';
 import Resource from '../models/Resource.js';
+import Tribe from '../models/Tribe.js';
 import { protect } from '../middleware/auth.js';
 
 const router = express.Router({ mergeParams: true });
@@ -9,6 +10,12 @@ router.get('/', protect, async (req, res) => {
     try {
         const { tribeId } = req.params;
         const { type, category, search } = req.query;
+
+        // Verify user is a member of the tribe
+        const tribe = await Tribe.findOne({ _id: tribeId, 'members.user': req.user._id });
+        if (!tribe) {
+            return res.status(403).json({ message: 'Not authorized for this tribe' });
+        }
 
         const query = { tribe: tribeId, isPublic: true };
         if (type) query.type = type;
@@ -78,16 +85,23 @@ router.post('/:resourceId/download', protect, async (req, res) => {
 // Delete resource
 router.delete('/:resourceId', protect, async (req, res) => {
     try {
-        const { resourceId } = req.params;
+        const { tribeId, resourceId } = req.params;
 
         const resource = await Resource.findById(resourceId);
         if (!resource) {
             return res.status(404).json({ message: 'Resource not found' });
         }
 
-        // Check if user is the uploader
-        if (resource.uploader.toString() !== req.user._id.toString()) {
-            return res.status(403).json({ message: 'Not authorized' });
+        // Check if user is the uploader OR a tribe leader
+        const tribe = await Tribe.findOne({
+            _id: tribeId,
+            members: { $elemMatch: { user: req.user._id, role: 'Leader' } }
+        });
+
+        const isUploader = resource.uploader.toString() === req.user._id.toString();
+
+        if (!isUploader && !tribe) {
+            return res.status(403).json({ message: 'Only uploader or tribe leaders can delete resources' });
         }
 
         await resource.deleteOne();

@@ -25,11 +25,20 @@ export default function TribeDetails({ tribe: initialTribe, onBack }) {
     const storedUser = localStorage.getItem('user')
     const currentUser = storedUser ? JSON.parse(storedUser) : null
 
-    // Map members to flat structure for child components
+    // Determine user's role in this tribe
+    const getRole = () => {
+        const member = tribe.members?.find(m => (m.user?._id || m.user) === currentUser?._id)
+        return member?.role || 'Member'
+    }
+    const userRole = getRole()
+    const isLeader = userRole === 'Leader'
+
+    // Map members for display
     const tribeMembers = (tribe.members || []).map(m => ({
         ...(m.user || {}),
         role: m.role,
         joinedAt: m.joinedAt,
+        status: m.user?.isActive ? 'online' : 'offline' // Use isActive for status
     }))
 
     // Tribe stats for overview
@@ -45,6 +54,15 @@ export default function TribeDetails({ tribe: initialTribe, onBack }) {
             onBack()
         } else {
             navigate('/my-tribes')
+        }
+    }
+
+    const fetchTribeData = async () => {
+        try {
+            const data = await tribesAPI.getTribe(tribe._id)
+            setTribe(data)
+        } catch (error) {
+            console.error('Failed to refresh tribe data:', error)
         }
     }
 
@@ -101,7 +119,7 @@ export default function TribeDetails({ tribe: initialTribe, onBack }) {
                 </div>
                 <div className="flex items-center gap-2">
                     {/* Delete button only for Leader */}
-                    {tribeMembers.find(m => m._id === currentUser?._id)?.role === 'Leader' && (
+                    {isLeader && (
                         <button
                             onClick={handleDeleteTribe}
                             className="p-2 hover:bg-red-50 rounded-lg transition-colors text-red-500"
@@ -354,10 +372,11 @@ export default function TribeDetails({ tribe: initialTribe, onBack }) {
                 <Tabs.Content value="members" className="mt-6">
                     <TribeMembers
                         tribeId={tribe._id}
-                        members={tribe.members}
+                        members={tribeMembers}
                         currentUser={currentUser}
-                        onInvite={(email) => tribesAPI.addMember(tribe._id, email)}
-                        onRemove={(userId) => tribesAPI.removeMember(tribe._id, userId)}
+                        isLeader={isLeader}
+                        onInvite={fetchTribeData}
+                        onRemove={fetchTribeData}
                     />
                 </Tabs.Content>
 
@@ -367,6 +386,8 @@ export default function TribeDetails({ tribe: initialTribe, onBack }) {
                         tribeId={tribe._id}
                         problems={[]} // Problems should be fetched by the component
                         currentUser={currentUser}
+                        isLeader={isLeader}
+                        onCreateProblem={fetchTribeData}
                     />
                 </Tabs.Content>
 
@@ -384,7 +405,9 @@ export default function TribeDetails({ tribe: initialTribe, onBack }) {
                     <RitualScheduler
                         tribeId={tribe._id}
                         currentUser={currentUser}
-                        onSchedule={() => console.log('Ritual scheduled')}
+                        isLeader={isLeader}
+                        onSchedule={fetchTribeData}
+                        onAttend={fetchTribeData}
                     />
                 </Tabs.Content>
 
@@ -399,15 +422,17 @@ export default function TribeDetails({ tribe: initialTribe, onBack }) {
                 {/* Achievements Tab */}
                 <Tabs.Content value="achievements" className="mt-6">
                     <Achievements
-                        tribeId={tribe.id}
+                        tribeId={tribe._id}
                     />
                 </Tabs.Content>
 
                 {/* Resources Tab */}
                 <Tabs.Content value="resources" className="mt-6">
                     <ResourceLibrary
-                        tribeId={tribe.id}
+                        tribeId={tribe._id}
                         currentUser={currentUser}
+                        isLeader={isLeader}
+                        onUpload={fetchTribeData}
                     />
                 </Tabs.Content>
             </Tabs.Root>

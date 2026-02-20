@@ -1,5 +1,6 @@
 import express from 'express';
 import Problem from '../models/Problem.js';
+import Tribe from '../models/Tribe.js';
 import { protect } from '../middleware/auth.js';
 
 const router = express.Router({ mergeParams: true });
@@ -9,6 +10,12 @@ router.get('/', protect, async (req, res) => {
     try {
         const { tribeId } = req.params;
         const { status, category } = req.query;
+
+        // Verify user is a member of the tribe
+        const tribe = await Tribe.findOne({ _id: tribeId, 'members.user': req.user._id });
+        if (!tribe) {
+            return res.status(403).json({ message: 'Not authorized for this tribe' });
+        }
 
         const query = { tribe: tribeId };
         if (status) query.status = status;
@@ -112,12 +119,24 @@ router.post('/:problemId/solutions/:solutionId/vote', protect, async (req, res) 
 // Update problem status
 router.patch('/:problemId/status', protect, async (req, res) => {
     try {
-        const { problemId } = req.params;
+        const { tribeId, problemId } = req.params;
         const { status } = req.body;
 
         const problem = await Problem.findById(problemId);
         if (!problem) {
             return res.status(404).json({ message: 'Problem not found' });
+        }
+
+        // Check if user is the creator OR a tribe leader
+        const tribe = await Tribe.findOne({
+            _id: tribeId,
+            members: { $elemMatch: { user: req.user._id, role: 'Leader' } }
+        });
+
+        const isCreator = problem.creator.toString() === req.user._id.toString();
+
+        if (!isCreator && !tribe) {
+            return res.status(403).json({ message: 'Only creator or tribe leaders can change problem status' });
         }
 
         problem.status = status;

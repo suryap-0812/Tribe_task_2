@@ -5,7 +5,7 @@ import Button from './ui/Button'
 import Badge from './ui/Badge'
 import { tribesAPI } from '../services/api'
 
-export default function TribeMembers({ tribeId, members, currentUser, onInvite, onRemove }) {
+export default function TribeMembers({ tribeId, members, currentUser, userRole, isLeader, onInvite, onRemove }) {
     const [viewMode, setViewMode] = useState('grid') // grid or list
     const [filterRole, setFilterRole] = useState('all')
     const [filterStatus, setFilterStatus] = useState('all')
@@ -84,13 +84,15 @@ export default function TribeMembers({ tribeId, members, currentUser, onInvite, 
                     <h3 className="text-xl font-bold text-gray-900">Tribe Members</h3>
                     <p className="text-sm text-gray-600 mt-1">{members.length} total members</p>
                 </div>
-                <Button
-                    onClick={() => setShowInviteModal(true)}
-                    className="flex items-center gap-2"
-                >
-                    <UserPlus className="w-4 h-4" />
-                    Invite Member
-                </Button>
+                {isLeader && (
+                    <Button
+                        onClick={() => setShowInviteModal(true)}
+                        className="flex items-center gap-2"
+                    >
+                        <UserPlus className="w-4 h-4" />
+                        Invite Member
+                    </Button>
+                )}
             </div>
 
             {/* Filters */}
@@ -197,12 +199,14 @@ export default function TribeMembers({ tribeId, members, currentUser, onInvite, 
                                                 <button className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50">
                                                     Send Message
                                                 </button>
-                                                <button
-                                                    onClick={() => handleRemoveMember(member._id)}
-                                                    className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50"
-                                                >
-                                                    Remove
-                                                </button>
+                                                {isLeader && (
+                                                    <button
+                                                        onClick={() => handleRemove(member._id)}
+                                                        className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50"
+                                                    >
+                                                        Remove
+                                                    </button>
+                                                )}
                                             </div>
                                         </div>
                                     )}
@@ -267,9 +271,9 @@ export default function TribeMembers({ tribeId, members, currentUser, onInvite, 
                                                 {getStatusText(member.status)}
                                             </Badge>
 
-                                            {member._id !== currentUser._id && (
+                                            {isLeader && member._id !== currentUser._id && (
                                                 <button
-                                                    onClick={() => handleRemoveMember(member._id)}
+                                                    onClick={() => handleRemove(member._id)}
                                                     className="text-red-600 hover:text-red-700 text-sm font-medium"
                                                 >
                                                     Remove

@@ -5,7 +5,7 @@ import Button from './ui/Button'
 import Badge from './ui/Badge'
 import { tribesAPI } from '../services/api'
 
-export default function RitualScheduler({ tribeId, rituals: initialRituals, currentUser, onSchedule, onAttend }) {
+export default function RitualScheduler({ tribeId, rituals: initialRituals, currentUser, isLeader, onSchedule, onAttend }) {
     const [rituals, setRituals] = useState(initialRituals || [])
     const [showCreateModal, setShowCreateModal] = useState(false)
 
@@ -124,10 +124,12 @@ export default function RitualScheduler({ tribeId, rituals: initialRituals, curr
                             <Calendar className="w-5 h-5" />
                         </button>
                     </div>
-                    <Button onClick={() => setShowCreateModal(true)} className="flex items-center gap-2">
-                        <Plus className="w-4 h-4" />
-                        Create Ritual
-                    </Button>
+                    {isLeader && (
+                        <Button onClick={() => setShowCreateModal(true)} className="flex items-center gap-2">
+                            <Plus className="w-4 h-4" />
+                            Create Ritual
+                        </Button>
+                    )}
                 </div>
             </div>
 

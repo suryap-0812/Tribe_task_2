@@ -6,16 +6,16 @@ export default function TribeAnalytics({ tribe, members }) {
     const analyticsData = {
         weeklyTasks: [12, 15, 18, 22, 19, 25, 28],
         weeklyFocus: [120, 150, 135, 180, 165, 200, 190],
-        memberContributions: members?.map((m, i) => ({
+        memberContributions: (members || []).map((m, i) => ({
             member: m,
-            tasks: 15 - i * 2,
-            focusTime: 180 - i * 15,
-            contributions: 95 - i * 5
-        })) || [],
-        completionRate: 87,
-        averageFocusTime: 165,
-        totalTasksCompleted: 142,
-        activeStreak: 12
+            tasks: m.tasksCompleted || (15 - i * 2),
+            focusTime: m.focusTime || (180 - i * 15),
+            contributions: m.contributionScore || (95 - i * 5)
+        })),
+        completionRate: tribe.completionRate || 87,
+        averageFocusTime: tribe.averageFocusTime || 165,
+        totalTasksCompleted: tribe.completedTasks || 142,
+        activeStreak: tribe.activeStreak || 12
     }
 
     const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']

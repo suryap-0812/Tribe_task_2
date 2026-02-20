@@ -5,7 +5,7 @@ import Button from './ui/Button'
 import Badge from './ui/Badge'
 import { tribesAPI } from '../services/api'
 
-export default function ProblemSolvingBoard({ tribeId, problems: initialProblems, currentUser, onCreateProblem, onAddSolution, onVote }) {
+export default function ProblemSolvingBoard({ tribeId, problems: initialProblems, currentUser, isLeader, onCreateProblem, onAddSolution, onVote }) {
     const [problems, setProblems] = useState(initialProblems || [])
     const [showCreateModal, setShowCreateModal] = useState(false)
 
@@ -357,7 +357,7 @@ export default function ProblemSolvingBoard({ tribeId, problems: initialProblems
                                     <h4 className="font-semibold text-gray-900">
                                         Solutions ({selectedProblem.solutions.length})
                                     </h4>
-                                    {selectedProblem.status !== 'resolved' && (
+                                    {(selectedProblem.status !== 'resolved' && (selectedProblem.creator._id === currentUser?._id || isLeader)) && (
                                         <Button
                                             size="sm"
                                             variant="secondary"

@@ -1,5 +1,6 @@
 import express from 'express';
 import Ritual from '../models/Ritual.js';
+import Tribe from '../models/Tribe.js';
 import { protect } from '../middleware/auth.js';
 
 const router = express.Router({ mergeParams: true });
@@ -9,6 +10,12 @@ router.get('/', protect, async (req, res) => {
     try {
         const { tribeId } = req.params;
         const { isActive = true } = req.query;
+
+        // Verify user is a member of the tribe
+        const tribe = await Tribe.findOne({ _id: tribeId, 'members.user': req.user._id });
+        if (!tribe) {
+            return res.status(403).json({ message: 'Not authorized for this tribe' });
+        }
 
         const rituals = await Ritual.find({
             tribe: tribeId,
@@ -29,6 +36,16 @@ router.post('/', protect, async (req, res) => {
     try {
         const { tribeId } = req.params;
         const { name, description, schedule, badge } = req.body;
+
+        // Verify user is a Leader of the tribe
+        const tribe = await Tribe.findOne({
+            _id: tribeId,
+            members: { $elemMatch: { user: req.user._id, role: 'Leader' } }
+        });
+
+        if (!tribe) {
+            return res.status(403).json({ message: 'Only tribe leaders can create rituals' });
+        }
 
         const ritual = await Ritual.create({
             tribe: tribeId,
