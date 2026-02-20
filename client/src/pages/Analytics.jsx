@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from 'react'
-import { CheckCircle2, Calendar, Users, Flag, Filter, SortAsc, Loader2 } from 'lucide-react'
+import { CheckCircle2, Calendar, Users, Flag, Filter, SortAsc, Loader2, RotateCcw, MoreVertical } from 'lucide-react'
 import Card, { CardHeader, CardTitle, CardContent } from '../components/ui/Card'
 import Badge from '../components/ui/Badge'
 import Select, { SelectTrigger, SelectContent, SelectItem, SelectValue } from '../components/ui/Select'
+import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { tasksAPI, tribesAPI } from '../services/api'
 
 export default function Analytics() {
@@ -32,6 +33,24 @@ export default function Analytics() {
     useEffect(() => {
         fetchData()
     }, [fetchData])
+
+    const handleRevertTask = async (taskId) => {
+        // Optimistic update
+        setAllTasks(prev => prev.map(t =>
+            (t._id || t.id) === taskId ? { ...t, completed: false, status: 'pending' } : t
+        ))
+
+        try {
+            await tasksAPI.completeTask(taskId) // This toggles completion
+            // Silent refresh to ensure state is correct
+            const tasksData = await tasksAPI.getTasks({ status: 'completed' })
+            setAllTasks(Array.isArray(tasksData) ? tasksData : [])
+        } catch (error) {
+            console.error('Failed to revert task:', error)
+            alert('Failed to revert task. Please try again.')
+            fetchData() // Revert local state on error
+        }
+    }
 
     // Get completed tasks
     let completedTasks = allTasks.filter(task => task.completed)
@@ -205,21 +224,45 @@ export default function Analytics() {
                         <div className="space-y-3">
                             {completedTasks.map((task) => (
                                 <div
-                                    key={task.id}
-                                    className="p-4 rounded-lg border border-gray-200 hover:border-primary hover:bg-primary-50/50 transition-all"
+                                    key={task._id || task.id}
+                                    className="p-4 rounded-lg border border-gray-200 hover:border-primary hover:bg-primary-50/50 transition-all group"
                                 >
-                                    <div className="flex items-start justify-between mb-2">
-                                        <div className="flex items-start gap-3 flex-1">
+                                    <div className="flex items-start justify-between">
+                                        <div className="flex items-start gap-3 flex-1 min-w-0">
                                             <CheckCircle2 className="w-5 h-5 text-green-600 mt-0.5 flex-shrink-0" />
                                             <div className="flex-1 min-w-0">
-                                                <h4 className="font-medium text-gray-900 mb-1">{task.title}</h4>
-                                                <p className="text-sm text-gray-600 mb-2">{task.description}</p>
+                                                <div className="flex items-start justify-between gap-2">
+                                                    <h4 className="font-medium text-gray-900 mb-1 truncate">{task.title}</h4>
+                                                    <DropdownMenu.Root>
+                                                        <DropdownMenu.Trigger asChild>
+                                                            <button className="p-1 hover:bg-gray-100 rounded-md transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100">
+                                                                <MoreVertical className="w-4 h-4 text-gray-400" />
+                                                            </button>
+                                                        </DropdownMenu.Trigger>
+                                                        <DropdownMenu.Portal>
+                                                            <DropdownMenu.Content
+                                                                className="min-w-[160px] bg-white rounded-lg shadow-lg border border-gray-200 p-1 z-50"
+                                                                sideOffset={5}
+                                                                align="end"
+                                                            >
+                                                                <DropdownMenu.Item
+                                                                    className="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-primary-50 hover:text-primary rounded-md cursor-pointer outline-none transition-colors"
+                                                                    onSelect={() => handleRevertTask(task._id || task.id)}
+                                                                >
+                                                                    <RotateCcw className="w-4 h-4" />
+                                                                    Revert to Pending
+                                                                </DropdownMenu.Item>
+                                                            </DropdownMenu.Content>
+                                                        </DropdownMenu.Portal>
+                                                    </DropdownMenu.Root>
+                                                </div>
+                                                <p className="text-sm text-gray-600 mb-2 line-clamp-2">{task.description}</p>
 
                                                 <div className="flex flex-wrap items-center gap-3 text-xs text-gray-500">
                                                     <div className="flex items-center gap-1">
                                                         <Flag className="w-3 h-3" />
                                                         <span>Priority:</span>
-                                                        <Badge variant={task.priority} className="text-xs">{task.priority}</Badge>
+                                                        <Badge variant={task.priority} className="text-xs uppercase px-1.5 py-0">{task.priority}</Badge>
                                                     </div>
 
                                                     <div className="flex items-center gap-1">

@@ -208,8 +208,8 @@ export default function MyTribes() {
                     </CardContent>
                 </Card>
 
-                {/* Tribe Cards */}
-                {tribes.map((tribe) => (
+                {/* Tribe Cards - Filter out the hardcoded "Personal Space" which is now "My Space" */}
+                {tribes.filter(t => t.name !== 'Personal Space').map((tribe) => (
                     <Card key={tribe.id} className="hover:shadow-lg transition-shadow">
                         <CardContent>
                             <div className="flex items-start gap-3 mb-4">
