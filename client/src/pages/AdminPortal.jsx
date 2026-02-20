@@ -18,6 +18,10 @@ export default function AdminPortal() {
 
     useEffect(() => {
         fetchAdminData()
+
+        // Auto-refresh every 30 seconds for real-time feel
+        const interval = setInterval(fetchAdminData, 30000)
+        return () => clearInterval(interval)
     }, [])
 
     const fetchAdminData = async () => {
@@ -89,7 +93,14 @@ export default function AdminPortal() {
                         <Shield className="w-8 h-8 text-primary" />
                         Admin Portal
                     </h1>
-                    <p className="text-gray-500 mt-1">System monitoring and management dashboard</p>
+                    <p className="text-gray-500 mt-1 flex items-center gap-2">
+                        System monitoring and management dashboard
+                        {stats?.lastUpdated && (
+                            <span className="text-[10px] bg-green-50 text-green-600 px-2 py-0.5 rounded-full border border-green-100 font-medium">
+                                Last synced: {new Date(stats.lastUpdated).toLocaleTimeString()}
+                            </span>
+                        )}
+                    </p>
                 </div>
                 <div className="flex items-center gap-3">
                     <Button variant="outline" onClick={fetchAdminData}>
@@ -237,7 +248,7 @@ export default function AdminPortal() {
                                                     {new Date(user.createdAt).toLocaleDateString()}
                                                 </td>
                                                 <td className="px-6 py-4 text-sm font-medium text-gray-900">
-                                                    {user.tribes?.length || 0}
+                                                    {user.currentTribeCount || 0}
                                                 </td>
                                                 <td className="px-6 py-4 text-right">
                                                     {currentUser?._id !== user._id && (

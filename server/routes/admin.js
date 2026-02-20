@@ -17,8 +17,8 @@ router.get('/stats', async (req, res) => {
     try {
         const totalUsers = await User.countDocuments();
         const totalTribes = await Tribe.countDocuments();
-        const totalTasks = await Task.countDocuments();
-        const totalFocusSessions = await FocusSession.countDocuments();
+        const totalTasks = await Task.countDocuments({ status: 'completed' });
+        const totalFocusSessions = await FocusSession.countDocuments({ status: 'completed' });
 
         // Growth stats (last 30 days)
         const thirtyDaysAgo = new Date();
@@ -35,7 +35,8 @@ router.get('/stats', async (req, res) => {
             growth: {
                 newUsers,
                 newTribes
-            }
+            },
+            lastUpdated: new Date()
         });
     } catch (error) {
         res.status(500).json({ message: 'Server error fetching stats' });
@@ -43,12 +44,26 @@ router.get('/stats', async (req, res) => {
 });
 
 // @route   GET /api/admin/users
-// @desc    Get all users
+// @desc    Get all users with real-time tribe counts
 router.get('/users', async (req, res) => {
     try {
         const users = await User.find().select('-password').sort({ createdAt: -1 });
-        res.json(users);
+
+        // Enhance users with the actual count of tribes they are currently in
+        const usersWithRealCounts = await Promise.all(users.map(async (user) => {
+            const activeTribeCount = await Tribe.countDocuments({
+                'members.user': user._id
+            });
+
+            const userObj = user.toObject();
+            // Override the static tribes array length with real-time membership count
+            userObj.currentTribeCount = activeTribeCount;
+            return userObj;
+        }));
+
+        res.json(usersWithRealCounts);
     } catch (error) {
+        console.error('Admin users fetch error:', error);
         res.status(500).json({ message: 'Server error fetching users' });
     }
 });
@@ -69,9 +84,16 @@ router.delete('/users/:id', async (req, res) => {
             return res.status(400).json({ message: 'Cannot delete the only admin' });
         }
 
+        // Cleanup: remove user from all tribes they are in
+        await Tribe.updateMany(
+            { 'members.user': req.params.id },
+            { $pull: { members: { user: req.params.id } } }
+        );
+
         await User.findByIdAndDelete(req.params.id);
         res.json({ message: 'User deleted successfully' });
     } catch (error) {
+        console.error('Admin user delete error:', error);
         res.status(500).json({ message: 'Server error deleting user' });
     }
 });
@@ -93,9 +115,19 @@ router.get('/tribes', async (req, res) => {
 // @desc    Delete a tribe
 router.delete('/tribes/:id', async (req, res) => {
     try {
+        const tribe = await Tribe.findById(req.params.id);
+        if (!tribe) return res.status(404).json({ message: 'Tribe not found' });
+
+        // Cleanup: remove tribe from all users' tribes array
+        await User.updateMany(
+            { tribes: tribe._id },
+            { $pull: { tribes: tribe._id } }
+        );
+
         await Tribe.findByIdAndDelete(req.params.id);
         res.json({ message: 'Tribe deleted successfully' });
     } catch (error) {
+        console.error('Admin tribe delete error:', error);
         res.status(500).json({ message: 'Server error deleting tribe' });
     }
 });
