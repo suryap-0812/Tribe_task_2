@@ -3,6 +3,8 @@ import { body, validationResult } from 'express-validator';
 import Tribe from '../models/Tribe.js';
 import Task from '../models/Task.js';
 import User from '../models/User.js';
+import FocusSession from '../models/FocusSession.js';
+import mongoose from 'mongoose';
 import { mockTribes, mockTasks, mockUser } from '../utils/mockData.js';
 import { protect } from '../middleware/auth.js';
 import messagesRouter from './messages.js';
@@ -10,6 +12,84 @@ import problemsRouter from './problems.js';
 import buddySessionsRouter from './buddySessions.js';
 import ritualsRouter from './rituals.js';
 import resourcesRouter from './resources.js';
+import { AchievementDefinition, UserAchievement } from '../models/Achievement.js';
+import BuddySession from '../models/BuddySession.js';
+import Problem from '../models/Problem.js';
+
+const defaultAchievements = [
+    {
+        name: 'First Steps',
+        description: 'Complete your first task',
+        icon: '🎯',
+        rarity: 'common',
+        criteria: 'Complete 1 task',
+        criteriaValue: 1,
+        criteriaType: 'tasks_completed'
+    },
+    {
+        name: 'Task Master',
+        description: 'Complete 50 tasks',
+        icon: '📋',
+        rarity: 'rare',
+        criteria: 'Complete 50 tasks',
+        criteriaValue: 50,
+        criteriaType: 'tasks_completed'
+    },
+    {
+        name: 'Focus Champion',
+        description: 'Accumulate 100 hours of focus time',
+        icon: '⏱️',
+        rarity: 'epic',
+        criteria: 'Complete 6000 minutes of focus time',
+        criteriaValue: 6000,
+        criteriaType: 'focus_time'
+    },
+    {
+        name: 'Streak Warrior',
+        description: 'Maintain a 30-day check-in streak',
+        icon: '🔥',
+        rarity: 'epic',
+        criteria: 'Check in for 30 consecutive days',
+        criteriaValue: 30,
+        criteriaType: 'streak'
+    },
+    {
+        name: 'Tribe Legend',
+        description: 'Help your tribe achieve 1000 completed tasks',
+        icon: '👑',
+        rarity: 'legendary',
+        criteria: 'Tribe completes 1000 tasks',
+        criteriaValue: 1000,
+        criteriaType: 'tribe_tasks'
+    },
+    {
+        name: 'Perfect Week',
+        description: 'Complete all daily goals for 7 consecutive days',
+        icon: '✨',
+        rarity: 'rare',
+        criteria: 'Complete all goals for 7 days straight',
+        criteriaValue: 7,
+        criteriaType: 'streak'
+    },
+    {
+        name: 'Buddy Champion',
+        description: 'Complete 20 buddy sessions',
+        icon: '🤝',
+        rarity: 'rare',
+        criteria: 'Complete 20 buddy sessions',
+        criteriaValue: 20,
+        criteriaType: 'buddy_sessions'
+    },
+    {
+        name: 'Problem Solver',
+        description: 'Have 10 of your solutions upvoted',
+        icon: '💡',
+        rarity: 'epic',
+        criteria: 'Get 10 total votes on solutions',
+        criteriaValue: 10,
+        criteriaType: 'solutions_voted'
+    }
+];
 
 const router = express.Router();
 
@@ -551,6 +631,241 @@ router.post('/:id/requests/:userId/reject', async (req, res) => {
         res.json({ message: 'Request rejected' });
     } catch (error) {
         console.error('Reject request error:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+});
+
+// @route   GET /api/tribes/:id/analytics
+// @desc    Get tribe-specific analytics
+// @access  Private
+router.get('/:id/analytics', async (req, res) => {
+    try {
+        const tribeId = req.params.id;
+        const tribe = await Tribe.findById(tribeId).populate('members.user', 'name email avatar');
+        if (!tribe) return res.status(404).json({ message: 'Tribe not found' });
+
+        // Get last 7 days range
+        const last7Days = new Date();
+        last7Days.setDate(last7Days.getDate() - 7);
+        last7Days.setHours(0, 0, 0, 0);
+
+        // 1. Weekly Tasks (completed in last 7 days)
+        const weeklyTasksData = await Task.aggregate([
+            {
+                $match: {
+                    tribe: new mongoose.Types.ObjectId(tribeId),
+                    completed: true,
+                    completedAt: { $gte: last7Days }
+                }
+            },
+            {
+                $group: {
+                    _id: { $dateToString: { format: "%Y-%m-%d", date: "$completedAt" } },
+                    count: { $sum: 1 }
+                }
+            },
+            { $sort: { _id: 1 } }
+        ]);
+
+        // 2. Weekly Focus Time (last 7 days)
+        const weeklyFocusData = await FocusSession.aggregate([
+            {
+                $match: {
+                    tribe: new mongoose.Types.ObjectId(tribeId),
+                    status: 'completed',
+                    completedAt: { $gte: last7Days }
+                }
+            },
+            {
+                $group: {
+                    _id: { $dateToString: { format: "%Y-%m-%d", date: "$completedAt" } },
+                    duration: { $sum: "$duration" }
+                }
+            },
+            { $sort: { _id: 1 } }
+        ]);
+
+        // 3. Member Contributions (Aggregating tasks and focus time per member)
+        const memberTasks = await Task.aggregate([
+            { $match: { tribe: new mongoose.Types.ObjectId(tribeId), completed: true } },
+            { $group: { _id: "$user", count: { $sum: 1 } } }
+        ]);
+
+        const memberFocus = await FocusSession.aggregate([
+            { $match: { tribe: new mongoose.Types.ObjectId(tribeId), status: 'completed' } },
+            { $group: { _id: "$user", duration: { $sum: "$duration" } } }
+        ]);
+
+        // 4. Tribe wide stats
+        const totalTasks = await Task.countDocuments({ tribe: tribeId });
+        const completedTasks = await Task.countDocuments({ tribe: tribeId, completed: true });
+        const completionRate = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+
+        const totalFocusTimeResult = await FocusSession.aggregate([
+            { $match: { tribe: new mongoose.Types.ObjectId(tribeId), status: 'completed' } },
+            { $group: { _id: null, total: { $sum: "$duration" } } }
+        ]);
+        const totalFocusTime = totalFocusTimeResult.length > 0 ? totalFocusTimeResult[0].total : 0;
+        const averageFocusTime = tribe.members.length > 0 ? Math.round(totalFocusTime / tribe.members.length) : 0;
+
+        // Process weekly data to ensure 7 days are represented
+        const days = [];
+        for (let i = 6; i >= 0; i--) {
+            const d = new Date();
+            d.setDate(d.getDate() - i);
+            days.push(d.toISOString().split('T')[0]);
+        }
+
+        const weeklyTasks = days.map(day => {
+            const found = weeklyTasksData.find(d => d._id === day);
+            return found ? found.count : 0;
+        });
+
+        const weeklyFocus = days.map(day => {
+            const found = weeklyFocusData.find(d => d._id === day);
+            return found ? found.duration : 0;
+        });
+
+        // Combine member stats
+        const memberContributions = tribe.members.map(m => {
+            const t = memberTasks.find(mt => mt._id.toString() === m.user._id.toString());
+            const f = memberFocus.find(mf => mf._id.toString() === m.user._id.toString());
+            const tasksCount = t ? t.count : 0;
+            const focusCount = f ? f.duration : 0;
+
+            // Simplified contribution score: (tasks/totalTasks + focus/totalFocus) * 50
+            const taskWeight = completedTasks > 0 ? (tasksCount / completedTasks) : 0;
+            const focusWeight = totalFocusTime > 0 ? (focusCount / totalFocusTime) : 0;
+            const contributionScore = Math.round((taskWeight + focusWeight) * 50);
+
+            return {
+                member: m.user,
+                tasks: tasksCount,
+                focusTime: focusCount,
+                contributions: contributionScore || 0
+            };
+        });
+
+        res.json({
+            weeklyTasks,
+            weeklyFocus,
+            memberContributions,
+            completionRate,
+            averageFocusTime,
+            totalTasksCompleted: completedTasks,
+            activeStreak: tribe.activeStreak || 0
+        });
+    } catch (error) {
+        console.error('Get tribe analytics error:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+});
+
+// @route   GET /api/tribes/:id/achievements
+// @desc    Get user achievements for a tribe
+// @access  Private
+router.get('/:id/achievements', async (req, res) => {
+    try {
+        const tribeId = req.params.id;
+        const userId = req.user._id;
+
+        // Check if definitions exist, if not seed them
+        let definitions = await AchievementDefinition.find();
+        if (definitions.length === 0) {
+            definitions = await AchievementDefinition.insertMany(defaultAchievements);
+        }
+
+        const achievementsData = [];
+
+        for (const def of definitions) {
+            let currentValue = 0;
+
+            if (def.criteriaType === 'tasks_completed') {
+                currentValue = await Task.countDocuments({
+                    user: userId,
+                    tribe: tribeId,
+                    completed: true
+                });
+            } else if (def.criteriaType === 'focus_time') {
+                const sessions = await FocusSession.find({
+                    user: userId,
+                    tribe: tribeId,
+                    status: 'completed'
+                });
+                currentValue = sessions.reduce((sum, s) => sum + (s.duration || 0), 0);
+            } else if (def.criteriaType === 'streak') {
+                currentValue = req.user.checkInStreak || 0;
+            } else if (def.criteriaType === 'tribe_tasks') {
+                currentValue = await Task.countDocuments({
+                    tribe: tribeId,
+                    completed: true
+                });
+            } else if (def.criteriaType === 'buddy_sessions') {
+                currentValue = await BuddySession.countDocuments({
+                    tribe: tribeId,
+                    participants: userId,
+                    status: 'completed'
+                });
+            } else if (def.criteriaType === 'solutions_voted') {
+                const problems = await Problem.find({
+                    tribe: tribeId,
+                    'solutions.author': userId
+                });
+
+                currentValue = problems.reduce((sum, p) => {
+                    const userSolutions = p.solutions.filter(s => s.author.toString() === userId.toString());
+                    const solutionVotes = userSolutions.reduce((vSum, s) => vSum + (s.votes || 0), 0);
+                    return sum + solutionVotes;
+                }, 0);
+            }
+
+            const progress = Math.min(Math.round((currentValue / def.criteriaValue) * 100), 100);
+            const unlocked = progress >= 100;
+
+            let userAch = await UserAchievement.findOne({ user: userId, tribe: tribeId, achievement: def.name });
+
+            if (!userAch) {
+                userAch = new UserAchievement({
+                    user: userId,
+                    tribe: tribeId,
+                    achievement: def.name,
+                    progress,
+                    unlocked,
+                    currentValue,
+                    unlockedAt: unlocked ? new Date() : null
+                });
+                await userAch.save();
+            } else {
+                // Update if progress increased or currentValue changed
+                if (progress > userAch.progress || currentValue !== userAch.currentValue) {
+                    userAch.progress = progress;
+                    userAch.currentValue = currentValue;
+                    if (unlocked && !userAch.unlocked) {
+                        userAch.unlocked = true;
+                        userAch.unlockedAt = new Date();
+                    }
+                    await userAch.save();
+                }
+            }
+
+            achievementsData.push({
+                id: def._id,
+                name: def.name,
+                description: def.description,
+                icon: def.icon,
+                rarity: def.rarity,
+                unlocked: userAch.unlocked,
+                unlockedDate: userAch.unlockedAt,
+                progress: userAch.progress,
+                criteria: def.criteria,
+                currentValue: userAch.currentValue,
+                targetValue: def.criteriaValue
+            });
+        }
+
+        res.json(achievementsData);
+    } catch (error) {
+        console.error('Get achievements error:', error);
         res.status(500).json({ message: 'Server error' });
     }
 });

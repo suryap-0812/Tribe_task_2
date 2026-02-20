@@ -1,96 +1,31 @@
-import { useState } from 'react'
-import { Trophy, Lock, Star } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Trophy, Lock, Star, Loader2 } from 'lucide-react'
 import Card, { CardContent } from './ui/Card'
 import Badge from './ui/Badge'
+import { tribesAPI } from '../services/api'
 
-export default function Achievements({ tribeId, userAchievements = [] }) {
+export default function Achievements({ tribeId }) {
     const [filter, setFilter] = useState('all') // all, unlocked, locked
+    const [achievements, setAchievements] = useState([])
+    const [loading, setLoading] = useState(true)
 
-    const achievements = [
-        {
-            id: 1,
-            name: 'First Steps',
-            description: 'Complete your first task',
-            icon: '🎯',
-            rarity: 'common',
-            unlocked: true,
-            unlockedDate: new Date(Date.now() - 7 * 86400000),
-            progress: 100,
-            criteria: 'Complete 1 task'
-        },
-        {
-            id: 2,
-            name: 'Task Master',
-            description: 'Complete 50 tasks',
-            icon: '📋',
-            rarity: 'rare',
-            unlocked: true,
-            unlockedDate: new Date(Date.now() - 3 * 86400000),
-            progress: 100,
-            criteria: 'Complete 50 tasks'
-        },
-        {
-            id: 3,
-            name: 'Focus Champion',
-            description: 'Accumulate 100 hours of focus time',
-            icon: '⏱️',
-            rarity: 'epic',
-            unlocked: false,
-            progress: 67,
-            criteria: 'Complete 6000 minutes of focus time (currently 4020/6000)'
-        },
-        {
-            id: 4,
-            name: 'Streak Warrior',
-            description: 'Maintain a 30-day check-in streak',
-            icon: '🔥',
-            rarity: 'epic',
-            unlocked: false,
-            progress: 40,
-            criteria: 'Check in for 30 consecutive days (currently 12/30)'
-        },
-        {
-            id: 5,
-            name: 'Tribe Legend',
-            description: 'Help your tribe achieve 1000 completed tasks',
-            icon: '👑',
-            rarity: 'legendary',
-            unlocked: false,
-            progress: 14,
-            criteria: 'Tribe completes 1000 tasks (currently 142/1000)'
-        },
-        {
-            id: 6,
-            name: 'Perfect Week',
-            description: 'Complete all daily goals for 7 consecutive days',
-            icon: '✨',
-            rarity: 'rare',
-            unlocked: true,
-            unlockedDate: new Date(Date.now() - 1 * 86400000),
-            progress: 100,
-            criteria: 'Complete all goals for 7 days straight'
-        },
-        {
-            id: 7,
-            name: 'Buddy Champion',
-            description: 'Complete 20 buddy sessions',
-            icon: '🤝',
-            rarity: 'rare',
-            unlocked: false,
-            progress: 35,
-            criteria: 'Complete 20 buddy sessions (currently 7/20)'
-        },
-        {
-            id: 8,
-            name: 'Problem Solver',
-            description: 'Have 10 of your solutions upvoted',
-            icon: '💡',
-            rarity: 'epic',
-            unlocked: false,
-            progress: 50,
-            criteria: 'Get 10 total votes on solutions (currently 5/10)'
+    useEffect(() => {
+        const fetchAchievements = async () => {
+            try {
+                setLoading(true)
+                const data = await tribesAPI.getTribeAchievements(tribeId)
+                setAchievements(data)
+            } catch (error) {
+                console.error('Failed to fetch achievements:', error)
+            } finally {
+                setLoading(false)
+            }
         }
-    ]
+
+        if (tribeId) {
+            fetchAchievements()
+        }
+    }, [tribeId])
 
     const getRarityColor = (rarity) => {
         switch (rarity) {
@@ -105,6 +40,14 @@ export default function Achievements({ tribeId, userAchievements = [] }) {
             default:
                 return 'bg-gray-100 text-gray-700 border-gray-300'
         }
+    }
+
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center py-20">
+                <Loader2 className="w-8 h-8 animate-spin text-primary" />
+            </div>
+        )
     }
 
     const filteredAchievements = achievements.filter(achievement => {
@@ -134,8 +77,8 @@ export default function Achievements({ tribeId, userAchievements = [] }) {
                             key={f}
                             onClick={() => setFilter(f)}
                             className={`px-4 py-2 text-sm rounded-lg transition-colors capitalize ${filter === f
-                                    ? 'bg-primary text-white'
-                                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                ? 'bg-primary text-white'
+                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                                 }`}
                         >
                             {f}
@@ -168,8 +111,8 @@ export default function Achievements({ tribeId, userAchievements = [] }) {
                     <Card
                         key={achievement.id}
                         className={`relative overflow-hidden transition-all ${achievement.unlocked
-                                ? 'hover:shadow-lg cursor-pointer'
-                                : 'opacity-75'
+                            ? 'hover:shadow-lg cursor-pointer'
+                            : 'opacity-75'
                             }`}
                     >
                         <CardContent className="pt-6">
@@ -201,7 +144,7 @@ export default function Achievements({ tribeId, userAchievements = [] }) {
                                         <div className="flex items-center justify-between text-xs text-gray-500">
                                             <span>Unlocked</span>
                                             <span>
-                                                {achievement.unlockedDate?.toLocaleDateString('en-US', {
+                                                {achievement.unlockedDate && new Date(achievement.unlockedDate).toLocaleDateString('en-US', {
                                                     month: 'short',
                                                     day: 'numeric',
                                                     year: 'numeric'
@@ -229,9 +172,9 @@ export default function Achievements({ tribeId, userAchievements = [] }) {
                         {/* Rarity Glow Effect */}
                         {achievement.unlocked && (
                             <div className={`absolute inset-0 bg-gradient-to-br opacity-5 pointer-events-none ${achievement.rarity === 'legendary' ? 'from-yellow-400 to-orange-500' :
-                                    achievement.rarity === 'epic' ? 'from-purple-400 to-pink-500' :
-                                        achievement.rarity === 'rare' ? 'from-blue-400 to-cyan-500' :
-                                            'from-gray-400 to-gray-500'
+                                achievement.rarity === 'epic' ? 'from-purple-400 to-pink-500' :
+                                    achievement.rarity === 'rare' ? 'from-blue-400 to-cyan-500' :
+                                        'from-gray-400 to-gray-500'
                                 }`} />
                         )}
                     </Card>

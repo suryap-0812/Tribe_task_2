@@ -78,6 +78,8 @@ export const tribesAPI = {
     getJoinRequests: (id) => api.get(`/tribes/${id}/requests`),
     approveJoinRequest: (id, userId) => api.post(`/tribes/${id}/requests/${userId}/approve`),
     rejectJoinRequest: (id, userId) => api.post(`/tribes/${id}/requests/${userId}/reject`),
+    getTribeAnalytics: (id) => api.get(`/tribes/${id}/analytics`),
+    getTribeAchievements: (id) => api.get(`/tribes/${id}/achievements`),
 
     // Messages
     getMessages: (tribeId, params) => api.get(`/tribes/${tribeId}/messages`, { params }),

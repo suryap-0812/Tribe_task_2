@@ -1,27 +1,45 @@
-import { BarChart3, TrendingUp, Trophy, Target, Clock, CheckCircle } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { BarChart3, TrendingUp, Trophy, Target, Clock, CheckCircle, Loader2 } from 'lucide-react'
 import Card, { CardContent } from './ui/Card'
 import Badge from './ui/Badge'
+import { tribesAPI } from '../services/api'
 
 export default function TribeAnalytics({ tribe, members }) {
-    const analyticsData = {
-        weeklyTasks: [12, 15, 18, 22, 19, 25, 28],
-        weeklyFocus: [120, 150, 135, 180, 165, 200, 190],
-        memberContributions: (members || []).map((m, i) => ({
-            member: m,
-            tasks: m.tasksCompleted || (15 - i * 2),
-            focusTime: m.focusTime || (180 - i * 15),
-            contributions: m.contributionScore || (95 - i * 5)
-        })),
-        completionRate: tribe.completionRate || 87,
-        averageFocusTime: tribe.averageFocusTime || 165,
-        totalTasksCompleted: tribe.completedTasks || 142,
-        activeStreak: tribe.activeStreak || 12
+    const [analytics, setAnalytics] = useState(null)
+    const [loading, setLoading] = useState(true)
+
+    useEffect(() => {
+        const fetchAnalytics = async () => {
+            try {
+                setLoading(true)
+                const data = await tribesAPI.getTribeAnalytics(tribe._id || tribe.id)
+                setAnalytics(data)
+            } catch (error) {
+                console.error('Failed to fetch tribe analytics:', error)
+            } finally {
+                setLoading(false)
+            }
+        }
+
+        if (tribe?._id || tribe?.id) {
+            fetchAnalytics()
+        }
+    }, [tribe])
+
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center py-20">
+                <Loader2 className="w-8 h-8 animate-spin text-primary" />
+            </div>
+        )
     }
+
+    if (!analytics) return null
 
     const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
-    const maxTaskValue = Math.max(...analyticsData.weeklyTasks)
-    const maxFocusValue = Math.max(...analyticsData.weeklyFocus)
+    const maxTaskValue = Math.max(...analytics.weeklyTasks, 1)
+    const maxFocusValue = Math.max(...analytics.weeklyFocus, 1)
 
     return (
         <div className="space-y-6">
@@ -38,7 +56,7 @@ export default function TribeAnalytics({ tribe, members }) {
                         <div className="flex items-center justify-between">
                             <div>
                                 <p className="text-sm text-gray-600">Completion Rate</p>
-                                <p className="text-3xl font-bold text-gray-900 mt-1">{analyticsData.completionRate}%</p>
+                                <p className="text-3xl font-bold text-gray-900 mt-1">{analytics.completionRate}%</p>
                                 <p className="text-xs text-green-600 mt-1 flex items-center gap-1">
                                     <TrendingUp className="w-3 h-3" />
                                     +5% from last week
@@ -56,7 +74,7 @@ export default function TribeAnalytics({ tribe, members }) {
                         <div className="flex items-center justify-between">
                             <div>
                                 <p className="text-sm text-gray-600">Tasks Completed</p>
-                                <p className="text-3xl font-bold text-gray-900 mt-1">{analyticsData.totalTasksCompleted}</p>
+                                <p className="text-3xl font-bold text-gray-900 mt-1">{analytics.totalTasksCompleted}</p>
                                 <p className="text-xs text-green-600 mt-1 flex items-center gap-1">
                                     <TrendingUp className="w-3 h-3" />
                                     +12 this week
@@ -74,7 +92,7 @@ export default function TribeAnalytics({ tribe, members }) {
                         <div className="flex items-center justify-between">
                             <div>
                                 <p className="text-sm text-gray-600">Avg Focus Time</p>
-                                <p className="text-3xl font-bold text-gray-900 mt-1">{analyticsData.averageFocusTime}m</p>
+                                <p className="text-3xl font-bold text-gray-900 mt-1">{analytics.averageFocusTime}m</p>
                                 <p className="text-xs text-green-600 mt-1 flex items-center gap-1">
                                     <TrendingUp className="w-3 h-3" />
                                     +18m from last week
@@ -92,7 +110,7 @@ export default function TribeAnalytics({ tribe, members }) {
                         <div className="flex items-center justify-between">
                             <div>
                                 <p className="text-sm text-gray-600">Active Streak</p>
-                                <p className="text-3xl font-bold text-gray-900 mt-1">{analyticsData.activeStreak} days</p>
+                                <p className="text-3xl font-bold text-gray-900 mt-1">{analytics.activeStreak} days</p>
                                 <p className="text-xs text-green-600 mt-1 flex items-center gap-1">
                                     🔥 Keep it going!
                                 </p>
@@ -119,12 +137,12 @@ export default function TribeAnalytics({ tribe, members }) {
                                 <div key={day} className="space-y-2">
                                     <div className="flex items-center justify-between text-sm">
                                         <span className="text-gray-600 font-medium">{day}</span>
-                                        <span className="text-gray-900 font-semibold">{analyticsData.weeklyTasks[index]}</span>
+                                        <span className="text-gray-900 font-semibold">{analytics.weeklyTasks[index]}</span>
                                     </div>
                                     <div className="w-full bg-gray-100 rounded-full h-2">
                                         <div
                                             className="bg-gradient-to-r from-primary to-purple-600 h-2 rounded-full transition-all"
-                                            style={{ width: `${(analyticsData.weeklyTasks[index] / maxTaskValue) * 100}%` }}
+                                            style={{ width: `${(analytics.weeklyTasks[index] / maxTaskValue) * 100}%` }}
                                         />
                                     </div>
                                 </div>
@@ -145,12 +163,12 @@ export default function TribeAnalytics({ tribe, members }) {
                                 <div key={day} className="space-y-2">
                                     <div className="flex items-center justify-between text-sm">
                                         <span className="text-gray-600 font-medium">{day}</span>
-                                        <span className="text-gray-900 font-semibold">{analyticsData.weeklyFocus[index]}m</span>
+                                        <span className="text-gray-900 font-semibold">{analytics.weeklyFocus[index]}m</span>
                                     </div>
                                     <div className="w-full bg-gray-100 rounded-full h-2">
                                         <div
                                             className="bg-gradient-to-r from-purple-600 to-pink-600 h-2 rounded-full transition-all"
-                                            style={{ width: `${(analyticsData.weeklyFocus[index] / maxFocusValue) * 100}%` }}
+                                            style={{ width: `${(analytics.weeklyFocus[index] / maxFocusValue) * 100}%` }}
                                         />
                                     </div>
                                 </div>
@@ -171,7 +189,7 @@ export default function TribeAnalytics({ tribe, members }) {
                         <Badge variant="secondary">This Week</Badge>
                     </div>
                     <div className="space-y-3">
-                        {analyticsData.memberContributions.slice(0, 5).map((contrib, index) => (
+                        {analytics.memberContributions.slice(0, 5).map((contrib, index) => (
                             <div key={contrib.member._id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200">
                                 <div className="flex items-center gap-4">
                                     <div className={`flex items-center justify-center w-8 h-8 rounded-full font-bold text-sm ${index === 0 ? 'bg-yellow-100 text-yellow-700' :
