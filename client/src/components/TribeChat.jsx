@@ -3,8 +3,10 @@ import { Send, Smile, Paperclip, Search, MoreVertical } from 'lucide-react'
 import Card, { CardContent } from './ui/Card'
 import Button from './ui/Button'
 import { tribesAPI } from '../services/api'
+import { io } from 'socket.io-client'
 
 export default function TribeChat({ tribeId, currentUser, messages: initialMessages, onSendMessage, onReact }) {
+    const socketRef = useRef(null)
     const [messages, setMessages] = useState(initialMessages || [])
     const [newMessage, setNewMessage] = useState('')
     const [showEmojiPicker, setShowEmojiPicker] = useState(false)
@@ -26,6 +28,45 @@ export default function TribeChat({ tribeId, currentUser, messages: initialMessa
             }
         }
         fetchMessages()
+
+        // Socket.io initialization
+        socketRef.current = io({
+            auth: {
+                token: localStorage.getItem('token')
+            }
+        })
+
+        socketRef.current.on('connect', () => {
+            console.log('Connected to socket server:', socketRef.current.id)
+            socketRef.current.emit('join_tribe', tribeId)
+        })
+
+        socketRef.current.on('connect_error', (err) => {
+            console.error('Socket connection error:', err.message)
+        })
+
+        socketRef.current.on('receive_message', (message) => {
+            setMessages(prev => {
+                // De-duplicate: check if message already exists
+                const exists = prev.find(m => (m._id || m.id) === (message._id || message.id))
+                if (exists) return prev
+                return [...prev, message]
+            })
+        })
+
+        socketRef.current.on('receive_reaction', ({ messageId, message }) => {
+            setMessages(prev => prev.map(msg =>
+                (msg._id || msg.id) === messageId ? message : msg
+            ))
+        })
+
+        return () => {
+            if (socketRef.current) {
+                socketRef.current.emit('leave_tribe', tribeId)
+                socketRef.current.off('receive_message')
+                socketRef.current.disconnect()
+            }
+        }
     }, [tribeId])
 
     useEffect(() => {
@@ -48,6 +89,14 @@ export default function TribeChat({ tribeId, currentUser, messages: initialMessa
                     onSendMessage(data.message)
                 }
 
+                // Emit to socket for real-time update
+                if (socketRef.current) {
+                    socketRef.current.emit('send_message', {
+                        tribeId,
+                        message: data.message
+                    })
+                }
+
                 setMessages([...messages, data.message])
                 setNewMessage('')
                 setShowEmojiPicker(false)
@@ -67,6 +116,15 @@ export default function TribeChat({ tribeId, currentUser, messages: initialMessa
                 msg._id === messageId ? data.message : msg
             )
             setMessages(updatedMessages)
+
+            // Emit to socket for real-time update
+            if (socketRef.current) {
+                socketRef.current.emit('send_reaction', {
+                    tribeId,
+                    messageId,
+                    message: data.message
+                })
+            }
 
             if (onReact) {
                 onReact(messageId, emoji)
