@@ -129,39 +129,39 @@ export default function BuddyMode({ tribeId, members, currentUser, onStartSessio
                     <CardContent className="pt-6">
                         <div className="space-y-6">
                             {/* Session Header */}
-                            <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-4">
+                            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                                <div className="flex items-center gap-3">
                                     <div className="flex items-center gap-2">
-                                        <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white font-bold">
+                                        <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-br from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white font-bold text-sm sm:text-base">
                                             {currentUser?.avatar || (currentUser?.name ? currentUser.name.substring(0, 2).toUpperCase() : '??')}
                                         </div>
-                                        <Users className="w-6 h-6 text-primary" />
-                                        <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-blue-500 rounded-full flex items-center justify-center text-white font-bold">
+                                        <Users className="w-5 h-5 sm:w-6 sm:h-6 text-primary" />
+                                        <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-br from-green-500 to-blue-500 rounded-full flex items-center justify-center text-white font-bold text-sm sm:text-base">
                                             {activeBuddy.avatar || (activeBuddy.name ? activeBuddy.name.substring(0, 2).toUpperCase() : '??')}
                                         </div>
                                     </div>
                                     <div>
-                                        <h3 className="font-bold text-gray-900">Buddy Session Active</h3>
-                                        <p className="text-sm text-gray-600">with {activeBuddy.name}</p>
+                                        <h3 className="font-bold text-gray-900 leading-tight">Buddy Session Active</h3>
+                                        <p className="text-xs sm:text-sm text-gray-600">with {activeBuddy.name}</p>
                                     </div>
                                 </div>
-                                <Badge variant={sessionStatus === 'active' ? 'success' : 'secondary'} className="text-lg px-4 py-2">
+                                <Badge variant={sessionStatus === 'active' ? 'success' : 'secondary'} className="text-base sm:text-lg px-3 py-1 sm:px-4 sm:py-2">
                                     {sessionStatus === 'active' ? '● Live' : '⏸ Paused'}
                                 </Badge>
                             </div>
 
                             {/* Timer */}
-                            <div className="bg-gradient-to-br from-primary/10 to-purple-50 rounded-xl p-8 text-center">
+                            <div className="bg-gradient-to-br from-primary/10 to-purple-50 rounded-xl p-4 sm:p-8 text-center">
                                 <div className="flex items-center justify-center gap-2 mb-2">
-                                    <Clock className="w-6 h-6 text-primary" />
-                                    <span className="text-sm font-medium text-gray-700">Session Time</span>
+                                    <Clock className="w-5 h-5 sm:w-6 sm:h-6 text-primary" />
+                                    <span className="text-xs sm:text-sm font-medium text-gray-700">Session Time</span>
                                 </div>
-                                <div className="text-5xl font-bold text-gray-900 mb-6">{formatTime(sessionTime)}</div>
-                                <div className="flex items-center justify-center gap-3">
+                                <div className="text-4xl sm:text-5xl font-bold text-gray-900 mb-6">{formatTime(sessionTime)}</div>
+                                <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
                                     <Button
                                         onClick={handleTogglePause}
                                         variant="secondary"
-                                        className="flex items-center gap-2"
+                                        className="w-full sm:w-auto flex items-center justify-center gap-2"
                                     >
                                         {sessionStatus === 'active' ? (
                                             <><Pause className="w-4 h-4" /> Pause</>
@@ -171,7 +171,7 @@ export default function BuddyMode({ tribeId, members, currentUser, onStartSessio
                                     </Button>
                                     <Button
                                         onClick={handleEndSession}
-                                        className="flex items-center gap-2 bg-red-600 hover:bg-red-700"
+                                        className="w-full sm:w-auto flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700"
                                     >
                                         <StopCircle className="w-4 h-4" />
                                         End Session
@@ -259,7 +259,7 @@ export default function BuddyMode({ tribeId, members, currentUser, onStartSessio
                     ) : (
                         <div className="space-y-3">
                             {sessionHistory.map(session => (
-                                <div key={session.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200">
+                                <div key={session.id} className="flex flex-col xs:flex-row xs:items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200 gap-4">
                                     <div className="flex items-center gap-3">
                                         <div className="w-10 h-10 bg-gradient-to-br from-green-500 to-blue-500 rounded-full flex items-center justify-center text-white font-medium">
                                             {session.buddy.avatar || (session.buddy.name ? session.buddy.name.substring(0, 2).toUpperCase() : '??')}
@@ -271,7 +271,7 @@ export default function BuddyMode({ tribeId, members, currentUser, onStartSessio
                                             </p>
                                         </div>
                                     </div>
-                                    <div className="flex items-center gap-6">
+                                    <div className="flex items-center justify-around xs:justify-end gap-6 sm:gap-10 border-t xs:border-t-0 pt-3 xs:pt-0">
                                         <div className="text-center">
                                             <p className="text-sm font-semibold text-gray-900">{session.duration}m</p>
                                             <p className="text-xs text-gray-500">Duration</p>

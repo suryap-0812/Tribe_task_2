@@ -164,7 +164,7 @@ export default function Dashboard() {
         <div className="space-y-6">
             {/* Welcome Section */}
             <div>
-                <h1 className="text-3xl font-bold text-gray-900">Welcome back, {user?.name}</h1>
+                <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Welcome back, {user?.name}</h1>
                 <p className="text-gray-600 mt-1">
                     You have <span className="font-medium">{stats.dueToday} tasks</span> due today. Let's make it a good one.
                 </p>
@@ -277,8 +277,8 @@ export default function Dashboard() {
                                                     />
                                                     <div className="flex-1 min-w-0">
                                                         <p className={`text-sm font-medium transition-all duration-200 ${isCompleted
-                                                                ? 'line-through text-gray-400'
-                                                                : 'text-gray-900'
+                                                            ? 'line-through text-gray-400'
+                                                            : 'text-gray-900'
                                                             }`}>
                                                             {task.title}
                                                         </p>
@@ -320,8 +320,8 @@ export default function Dashboard() {
                                                 <div
                                                     key={taskId}
                                                     className={`flex items-start gap-3 p-3 rounded-lg hover:bg-gray-50 transition-all duration-300 ${isRemoving
-                                                            ? 'opacity-0 max-h-0 py-0 mb-0 overflow-hidden pointer-events-none'
-                                                            : 'opacity-100 max-h-40'
+                                                        ? 'opacity-0 max-h-0 py-0 mb-0 overflow-hidden pointer-events-none'
+                                                        : 'opacity-100 max-h-40'
                                                         }`}
                                                 >
                                                     <input

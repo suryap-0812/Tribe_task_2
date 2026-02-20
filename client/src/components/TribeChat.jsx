@@ -333,7 +333,7 @@ export default function TribeChat({ tribeId, currentUser, messages: initialMessa
 
                         {/* Emoji Picker */}
                         {showEmojiPicker && (
-                            <div className="absolute bottom-full right-0 mb-2 bg-white border border-gray-200 rounded-lg shadow-lg p-3 grid grid-cols-8 gap-2">
+                            <div className="absolute bottom-full right-0 mb-2 bg-white border border-gray-200 rounded-lg shadow-lg p-3 grid grid-cols-6 xs:grid-cols-8 gap-2">
                                 {emojis.concat(['😊', '😍', '🤔', '😎', '🙌', '✨', '💪', '🎯']).map(emoji => (
                                     <button
                                         key={emoji}

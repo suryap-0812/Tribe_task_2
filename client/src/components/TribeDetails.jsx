@@ -139,17 +139,19 @@ export default function TribeDetails({ tribe: initialTribe, onBack }) {
 
             {/* Tribe Info */}
             <div>
-                <div className="flex items-center gap-3">
-                    <h1 className="text-3xl font-bold text-gray-900">{tribe.name}</h1>
-                    <Badge variant="secondary" className="bg-primary/10 text-primary border-none">
-                        {tribe.category || 'General'}
-                    </Badge>
-                    {tribe.isPrivate && (
-                        <Badge variant="outline" className="text-gray-500 border-gray-300">
-                            <Shield className="w-3 h-3 mr-1" />
-                            Private
+                <div className="flex items-center flex-wrap gap-2 sm:gap-3">
+                    <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">{tribe.name}</h1>
+                    <div className="flex items-center gap-2">
+                        <Badge variant="secondary" className="bg-primary/10 text-primary border-none">
+                            {tribe.category || 'General'}
                         </Badge>
-                    )}
+                        {tribe.isPrivate && (
+                            <Badge variant="outline" className="text-gray-500 border-gray-300">
+                                <Shield className="w-3 h-3 mr-1" />
+                                Private
+                            </Badge>
+                        )}
+                    </div>
                 </div>
                 {tribe.description && (
                     <p className="text-gray-600 mt-2 max-w-2xl">{tribe.description}</p>

@@ -1,5 +1,6 @@
 import { Link, useLocation } from 'react-router-dom'
-import { Bell, Target } from 'lucide-react'
+import { Bell, Target, Menu, X } from 'lucide-react'
+import { useState } from 'react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { currentUser } from '../../data/mockData'
 import Badge from '../ui/Badge'
@@ -8,6 +9,7 @@ import { useAuth } from '../../context/AuthContext'
 export default function Header() {
     const location = useLocation()
     const { logout } = useAuth()
+    const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
     const navItems = [
         { path: '/', label: 'Dashboard' },
@@ -21,13 +23,23 @@ export default function Header() {
         <header className="bg-white border-b border-gray-200 sticky top-0 z-40">
             <div className="container">
                 <div className="flex items-center justify-between h-16">
-                    {/* Logo */}
-                    <Link to="/" className="flex items-center gap-2">
-                        <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-                            <Target className="w-5 h-5 text-white" />
-                        </div>
-                        <span className="text-xl font-bold text-gray-900">TribeTask</span>
-                    </Link>
+                    <div className="flex items-center gap-4">
+                        {/* Mobile Menu Button */}
+                        <button
+                            onClick={() => setMobileMenuOpen(true)}
+                            className="md:hidden p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                        >
+                            <Menu className="w-6 h-6" />
+                        </button>
+
+                        {/* Logo */}
+                        <Link to="/" className="flex items-center gap-2">
+                            <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
+                                <Target className="w-5 h-5 text-white" />
+                            </div>
+                            <span className="text-xl font-bold text-gray-900">TribeTask</span>
+                        </Link>
+                    </div>
 
                     {/* Navigation */}
                     <nav className="hidden md:flex items-center gap-1">
@@ -101,6 +113,64 @@ export default function Header() {
                             </DropdownMenu.Portal>
                         </DropdownMenu.Root>
                     </div>
+                </div>
+            </div>
+
+            {/* Mobile Menu Overlay */}
+            {mobileMenuOpen && (
+                <div
+                    className="fixed inset-0 bg-black/50 z-50 md:hidden"
+                    onClick={() => setMobileMenuOpen(false)}
+                />
+            )}
+
+            {/* Mobile Menu Content */}
+            <div
+                className={`fixed top-0 left-0 bottom-0 w-[280px] bg-white z-50 md:hidden transform transition-transform duration-300 ease-in-out ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
+                    }`}
+            >
+                <div className="p-4 border-b border-gray-200 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
+                            <Target className="w-5 h-5 text-white" />
+                        </div>
+                        <span className="text-xl font-bold text-gray-900">TribeTask</span>
+                    </div>
+                    <button
+                        onClick={() => setMobileMenuOpen(false)}
+                        className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                    >
+                        <X className="w-6 h-6" />
+                    </button>
+                </div>
+                <div className="p-4 space-y-2">
+                    {navItems.map((item) => {
+                        const isActive = location.pathname === item.path
+                        return (
+                            <Link
+                                key={item.path}
+                                to={item.path}
+                                onClick={() => setMobileMenuOpen(false)}
+                                className={`block px-4 py-3 rounded-lg text-base font-medium transition-colors ${isActive
+                                    ? 'bg-primary-50 text-primary'
+                                    : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                                    }`}
+                            >
+                                {item.label}
+                            </Link>
+                        )
+                    })}
+                </div>
+                <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-200">
+                    <button
+                        onClick={() => {
+                            setMobileMenuOpen(false);
+                            logout();
+                        }}
+                        className="w-full px-4 py-3 rounded-lg text-base font-medium text-red-600 hover:bg-red-50 transition-colors flex items-center gap-2"
+                    >
+                        Logout
+                    </button>
                 </div>
             </div>
         </header>

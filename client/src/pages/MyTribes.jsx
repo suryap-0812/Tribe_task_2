@@ -131,19 +131,19 @@ export default function MyTribes() {
     return (
         <div className="space-y-6">
             {/* Header */}
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
-                    <h1 className="text-3xl font-bold text-gray-900">My Tribes</h1>
-                    <p className="text-gray-600 mt-1">Collaborate and stay accountable with your tribes</p>
+                    <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">My Tribes</h1>
+                    <p className="text-sm sm:text-base text-gray-600 mt-1">Collaborate and stay accountable with your tribes</p>
                 </div>
-                <div className="flex gap-3">
-                    <Button variant="outline" onClick={handleJoinTribe}>
-                        <Users className="w-4 h-4 mr-2" />
-                        Join a Tribe
+                <div className="flex items-center gap-2 sm:gap-3">
+                    <Button variant="outline" size="sm" onClick={handleJoinTribe} className="flex-1 sm:flex-none">
+                        <Users className="w-4 h-4 mr-1.5 sm:mr-2" />
+                        Join <span className="hidden xs:inline">a Tribe</span>
                     </Button>
-                    <Button onClick={() => setIsCreateModalOpen(true)}>
-                        <Plus className="w-4 h-4 mr-2" />
-                        Create New Tribe
+                    <Button size="sm" onClick={() => setIsCreateModalOpen(true)} className="flex-1 sm:flex-none">
+                        <Plus className="w-4 h-4 mr-1.5 sm:mr-2" />
+                        Create <span className="hidden xs:inline">New Tribe</span>
                     </Button>
                 </div>
             </div>

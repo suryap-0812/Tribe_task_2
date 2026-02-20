@@ -140,12 +140,12 @@ export default function PendingTasks() {
     return (
         <div className="space-y-6">
             {/* Header */}
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
-                    <h1 className="text-3xl font-bold text-gray-900">Pending Tasks ({filteredTasks.length})</h1>
-                    <p className="text-gray-600 mt-1">Manage and track your personal and tribe tasks</p>
+                    <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Pending Tasks ({filteredTasks.length})</h1>
+                    <p className="text-sm sm:text-base text-gray-600 mt-1">Manage and track your personal and tribe tasks</p>
                 </div>
-                <Button onClick={() => setIsCreateModalOpen(true)}>
+                <Button onClick={() => setIsCreateModalOpen(true)} className="w-full sm:w-auto">
                     <Plus className="w-4 h-4 mr-2" />
                     Create Task
                 </Button>
@@ -156,9 +156,9 @@ export default function PendingTasks() {
                 <div className="space-y-4">
                     {/* Time Filter Tabs */}
                     <Tabs.Root value={activeTab} onValueChange={setActiveTab}>
-                        <div className="flex items-center gap-2">
-                            <span className="text-sm text-gray-600 mr-2">Show:</span>
-                            <Tabs.List className="inline-flex bg-gray-100 rounded-lg p-1">
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                            <span className="text-sm text-gray-600 min-w-12">Show:</span>
+                            <Tabs.List className="inline-flex bg-gray-100 rounded-lg p-1 w-full sm:w-auto overflow-x-auto whitespace-nowrap">
                                 <Tabs.Trigger
                                     value="today"
                                     className="px-4 py-2 text-sm font-medium rounded-md transition-colors data-[state=active]:bg-primary data-[state=active]:text-white data-[state=inactive]:text-gray-600"
@@ -182,15 +182,18 @@ export default function PendingTasks() {
                     </Tabs.Root>
 
                     {/* Additional Filters */}
-                    <div className="flex items-center gap-3">
-                        <Filter className="w-4 h-4 text-gray-400" />
-                        <span className="text-sm text-gray-600">Filter:</span>
+                    <div className="flex flex-wrap items-center gap-3">
+                        <div className="flex items-center gap-2 min-w-fit">
+                            <Filter className="w-4 h-4 text-gray-400" />
+                            <span className="text-sm text-gray-600">Filter:</span>
+                        </div>
 
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1 sm:gap-2 overflow-x-auto pb-1 sm:pb-0 no-scrollbar">
                             <Button
                                 variant={filter.type === 'all' ? 'outline' : 'ghost'}
                                 size="sm"
                                 onClick={() => setFilter({ ...filter, type: 'all' })}
+                                className="h-8 text-xs sm:text-sm"
                             >
                                 All
                             </Button>
@@ -198,6 +201,7 @@ export default function PendingTasks() {
                                 variant={filter.type === 'personal' ? 'outline' : 'ghost'}
                                 size="sm"
                                 onClick={() => setFilter({ ...filter, type: 'personal' })}
+                                className="h-8 text-xs sm:text-sm"
                             >
                                 Personal
                             </Button>
@@ -205,33 +209,36 @@ export default function PendingTasks() {
                                 variant={filter.type === 'tribe' ? 'outline' : 'ghost'}
                                 size="sm"
                                 onClick={() => setFilter({ ...filter, type: 'tribe' })}
+                                className="h-8 text-xs sm:text-sm"
                             >
                                 Tribe
                             </Button>
                         </div>
 
-                        <Select value={filter.priority} onValueChange={(value) => setFilter({ ...filter, priority: value })}>
-                            <SelectTrigger className="w-[140px] h-9">
-                                <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="all-priorities">All Priorities</SelectItem>
-                                <SelectItem value="high">High</SelectItem>
-                                <SelectItem value="medium">Medium</SelectItem>
-                                <SelectItem value="low">Low</SelectItem>
-                            </SelectContent>
-                        </Select>
+                        <div className="flex flex-1 items-center gap-2 min-w-full xs:min-w-fit">
+                            <Select value={filter.priority} onValueChange={(value) => setFilter({ ...filter, priority: value })}>
+                                <SelectTrigger className="flex-1 xs:w-[140px] h-9">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all-priorities">All Priorities</SelectItem>
+                                    <SelectItem value="high">High</SelectItem>
+                                    <SelectItem value="medium">Medium</SelectItem>
+                                    <SelectItem value="low">Low</SelectItem>
+                                </SelectContent>
+                            </Select>
 
-                        <Select value={filter.status} onValueChange={(value) => setFilter({ ...filter, status: value })}>
-                            <SelectTrigger className="w-[120px] h-9">
-                                <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="all-status">All Status</SelectItem>
-                                <SelectItem value="pending">Pending</SelectItem>
-                                <SelectItem value="in-progress">In Progress</SelectItem>
-                            </SelectContent>
-                        </Select>
+                            <Select value={filter.status} onValueChange={(value) => setFilter({ ...filter, status: value })}>
+                                <SelectTrigger className="flex-1 xs:w-[120px] h-9">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all-status">All Status</SelectItem>
+                                    <SelectItem value="pending">Pending</SelectItem>
+                                    <SelectItem value="in-progress">In Progress</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
                     </div>
                 </div>
             </Card>
