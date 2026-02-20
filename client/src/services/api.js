@@ -134,4 +134,12 @@ export const statsAPI = {
     getAnalytics: () => api.get('/stats/analytics'),
 };
 
+export const adminAPI = {
+    getStats: () => api.get('/admin/stats'),
+    getUsers: () => api.get('/admin/users'),
+    deleteUser: (id) => api.delete(`/admin/users/${id}`),
+    getTribes: () => api.get('/admin/tribes'),
+    deleteTribe: (id) => api.delete(`/admin/tribes/${id}`),
+};
+
 export default api;

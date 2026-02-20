@@ -10,13 +10,17 @@ export default function Header() {
     const { user, logout } = useAuth()
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
-    const navItems = [
-        { path: '/', label: 'Dashboard' },
-        { path: '/pending-tasks', label: 'Pending Tasks' },
-        { path: '/my-tribes', label: 'My Tribes' },
-        { path: '/focus-sessions', label: 'Focus Sessions' },
-        { path: '/analytics', label: 'Analytics' },
-    ]
+    const navItems = user?.isAdmin
+        ? [
+            { path: '/admin-portal', label: 'Admin Portal' },
+        ]
+        : [
+            { path: '/', label: 'Dashboard' },
+            { path: '/pending-tasks', label: 'Pending Tasks' },
+            { path: '/my-tribes', label: 'My Tribes' },
+            { path: '/focus-sessions', label: 'Focus Sessions' },
+            { path: '/analytics', label: 'Analytics' },
+        ]
 
     const userInitial = user?.name?.charAt(0) || 'U'
 
@@ -34,7 +38,7 @@ export default function Header() {
                         </button>
 
                         {/* Logo */}
-                        <Link to="/" className="flex items-center gap-2">
+                        <Link to={user?.isAdmin ? "/admin-portal" : "/"} className="flex items-center gap-2">
                             <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
                                 <Target className="w-5 h-5 text-white" />
                             </div>

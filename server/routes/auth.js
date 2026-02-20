@@ -14,6 +14,7 @@ const formatUser = (user) => ({
     checkInStreak: user.checkInStreak,
     dailyFocusGoal: user.dailyFocusGoal,
     tribes: user.tribes,
+    isAdmin: user.isAdmin,
 });
 
 // @route   POST /api/auth/register

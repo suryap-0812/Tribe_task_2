@@ -15,6 +15,7 @@ import taskRoutes from './routes/tasks.js';
 import tribeRoutes from './routes/tribes.js';
 import focusSessionRoutes from './routes/focusSessions.js';
 import statsRoutes from './routes/stats.js';
+import adminRoutes from './routes/admin.js';
 
 const app = express();
 const httpServer = createServer(app);
@@ -77,6 +78,7 @@ app.use('/api/tasks', taskRoutes);
 app.use('/api/tribes', tribeRoutes);
 app.use('/api/focus-sessions', focusSessionRoutes);
 app.use('/api/stats', statsRoutes);
+app.use('/api/admin', adminRoutes);
 
 // Health check route
 app.get('/api/health', (req, res) => {

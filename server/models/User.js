@@ -51,6 +51,10 @@ const userSchema = new mongoose.Schema(
                 ref: 'Tribe',
             },
         ],
+        isAdmin: {
+            type: Boolean,
+            default: false,
+        },
     },
     {
         timestamps: true,

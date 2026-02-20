@@ -45,6 +45,18 @@ export const protect = async (req, res, next) => {
 };
 
 /**
+ * adminOnly middleware
+ * Ensures the authenticated user is an administrator
+ */
+export const adminOnly = (req, res, next) => {
+    if (req.user && req.user.isAdmin) {
+        next();
+    } else {
+        res.status(403).json({ message: 'Access denied. Administrator privileges required.' });
+    }
+};
+
+/**
  * Generate a signed JWT token for a given user ID.
  * Expires in 30 days.
  */

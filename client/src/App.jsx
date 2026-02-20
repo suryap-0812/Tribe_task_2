@@ -7,6 +7,7 @@ import FocusSessions from './pages/FocusSessions'
 import Analytics from './pages/Analytics'
 import Profile from './pages/Profile'
 import Login from './pages/Login'
+import AdminPortal from './pages/AdminPortal'
 import { AuthProvider, useAuth } from './context/AuthContext'
 
 function AppContent() {
@@ -18,7 +19,7 @@ function AppContent() {
 
     return (
         <Routes>
-            <Route path="/login" element={!user ? <Login /> : <Navigate to="/" replace />} />
+            <Route path="/login" element={!user ? <Login /> : <Navigate to={user.isAdmin ? "/admin-portal" : "/"} replace />} />
 
             <Route path="/*" element={
                 user ? (
@@ -26,13 +27,23 @@ function AppContent() {
                         <Header />
                         <main className="container py-8">
                             <Routes>
-                                <Route path="/" element={<Dashboard />} />
-                                <Route path="/pending-tasks" element={<PendingTasks />} />
-                                <Route path="/my-tribes" element={<MyTribes />} />
-                                <Route path="/focus-sessions" element={<FocusSessions />} />
-                                <Route path="/analytics" element={<Analytics />} />
-                                <Route path="/profile" element={<Profile />} />
-                                <Route path="*" element={<Navigate to="/" replace />} />
+                                {user.isAdmin ? (
+                                    <>
+                                        <Route path="/admin-portal" element={<AdminPortal />} />
+                                        <Route path="/profile" element={<Profile />} />
+                                        <Route path="*" element={<Navigate to="/admin-portal" replace />} />
+                                    </>
+                                ) : (
+                                    <>
+                                        <Route path="/" element={<Dashboard />} />
+                                        <Route path="/pending-tasks" element={<PendingTasks />} />
+                                        <Route path="/my-tribes" element={<MyTribes />} />
+                                        <Route path="/focus-sessions" element={<FocusSessions />} />
+                                        <Route path="/analytics" element={<Analytics />} />
+                                        <Route path="/profile" element={<Profile />} />
+                                        <Route path="*" element={<Navigate to="/" replace />} />
+                                    </>
+                                )}
                             </Routes>
                         </main>
                     </div>
