@@ -1,96 +1,73 @@
 import express from 'express';
-import User from '../models/User.js';
-import Tribe from '../models/Tribe.js';
-import Task from '../models/Task.js';
-import FocusSession from '../models/FocusSession.js';
+import { Op } from 'sequelize';
+import sequelize from '../db.js';
+import { User, Tribe, Task, FocusSession, TribeMember } from '../models/associations.js';
 import { protect, adminOnly } from '../middleware/auth.js';
 
 const router = express.Router();
-
-// Apply admin protection to all routes
 router.use(protect);
 router.use(adminOnly);
 
-// @route   GET /api/admin/stats
-// @desc    Get system-wide stats
+// GET /api/admin/stats
 router.get('/stats', async (req, res) => {
     try {
-        const totalUsers = await User.countDocuments();
-        const totalTribes = await Tribe.countDocuments();
-        const totalTasks = await Task.countDocuments({ status: 'completed' });
-        const totalFocusSessions = await FocusSession.countDocuments({ status: 'completed' });
+        const thirtyDaysAgo = new Date(); thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-        // Growth stats (last 30 days)
-        const thirtyDaysAgo = new Date();
-        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        const [totalUsers, totalTribes, totalTasks, totalFocusSessions, newUsers, newTribes] = await Promise.all([
+            User.count(),
+            Tribe.count(),
+            Task.count({ where: { status: 'completed' } }),
+            FocusSession.count({ where: { status: 'completed' } }),
+            User.count({ where: { createdAt: { [Op.gte]: thirtyDaysAgo } } }),
+            Tribe.count({ where: { createdAt: { [Op.gte]: thirtyDaysAgo } } }),
+        ]);
 
-        const newUsers = await User.countDocuments({ createdAt: { $gte: thirtyDaysAgo } });
-        const newTribes = await Tribe.countDocuments({ createdAt: { $gte: thirtyDaysAgo } });
-
-        res.json({
-            totalUsers,
-            totalTribes,
-            totalTasks,
-            totalFocusSessions,
-            growth: {
-                newUsers,
-                newTribes
-            },
-            lastUpdated: new Date()
-        });
+        res.json({ totalUsers, totalTribes, totalTasks, totalFocusSessions, growth: { newUsers, newTribes }, lastUpdated: new Date() });
     } catch (error) {
         res.status(500).json({ message: 'Server error fetching stats' });
     }
 });
 
-// @route   GET /api/admin/users
-// @desc    Get all users with real-time tribe counts
+// GET /api/admin/users
 router.get('/users', async (req, res) => {
     try {
-        const users = await User.find().select('-password').sort({ createdAt: -1 });
+        const users = await User.findAll({
+            attributes: { exclude: ['password'] },
+            order: [['created_at', 'DESC']],
+        });
 
-        // Enhance users with the actual count of tribes they are currently in
-        const usersWithRealCounts = await Promise.all(users.map(async (user) => {
-            const activeTribeCount = await Tribe.countDocuments({
-                'members.user': user._id
-            });
-
-            const userObj = user.toObject();
-            // Override the static tribes array length with real-time membership count
-            userObj.currentTribeCount = activeTribeCount;
-            return userObj;
+        const usersWithCounts = await Promise.all(users.map(async (user) => {
+            const activeTribeCount = await sequelize.query(
+                'SELECT COUNT(*) as count FROM tribe_members WHERE user_id = :userId',
+                { replacements: { userId: user.id }, type: sequelize.QueryTypes.SELECT }
+            );
+            return { ...user.toJSON(), _id: user.id, currentTribeCount: parseInt(activeTribeCount[0]?.count || 0) };
         }));
 
-        res.json(usersWithRealCounts);
+        res.json(usersWithCounts);
     } catch (error) {
         console.error('Admin users fetch error:', error);
         res.status(500).json({ message: 'Server error fetching users' });
     }
 });
 
-// @route   DELETE /api/admin/users/:id
-// @desc    Delete a user
+// DELETE /api/admin/users/:id
 router.delete('/users/:id', async (req, res) => {
     try {
-        const user = await User.findById(req.params.id);
+        const user = await User.findByPk(req.params.id);
         if (!user) return res.status(404).json({ message: 'User not found' });
 
-        // Prevent self-deletion
-        if (user._id.toString() === req.user._id.toString()) {
-            return res.status(400).json({ message: 'You cannot delete your own administrative account' });
+        if (user.id === req.user.id) return res.status(400).json({ message: 'You cannot delete your own administrative account' });
+
+        if (user.isAdmin) {
+            const adminCount = await User.count({ where: { isAdmin: true } });
+            if (adminCount <= 1) return res.status(400).json({ message: 'Cannot delete the only admin' });
         }
 
-        if (user.isAdmin && (await User.countDocuments({ isAdmin: true })) <= 1) {
-            return res.status(400).json({ message: 'Cannot delete the only admin' });
-        }
+        // Remove user from all tribe_members
+        await sequelize.query('DELETE FROM tribe_members WHERE user_id = :userId', { replacements: { userId: req.params.id } });
 
-        // Cleanup: remove user from all tribes they are in
-        await Tribe.updateMany(
-            { 'members.user': req.params.id },
-            { $pull: { members: { user: req.params.id } } }
-        );
-
-        await User.findByIdAndDelete(req.params.id);
+        await User.destroy({ where: { id: req.params.id } });
         res.json({ message: 'User deleted successfully' });
     } catch (error) {
         console.error('Admin user delete error:', error);
@@ -98,33 +75,29 @@ router.delete('/users/:id', async (req, res) => {
     }
 });
 
-// @route   GET /api/admin/tribes
-// @desc    Get all tribes
+// GET /api/admin/tribes
 router.get('/tribes', async (req, res) => {
     try {
-        const tribes = await Tribe.find()
-            .populate('createdBy', 'name email')
-            .sort({ createdAt: -1 });
-        res.json(tribes);
+        const tribes = await Tribe.findAll({
+            include: [{ model: User, as: 'creator', attributes: ['id', 'name', 'email'] }],
+            order: [['created_at', 'DESC']],
+        });
+        res.json(tribes.map(t => ({ ...t.toJSON(), _id: t.id })));
     } catch (error) {
         res.status(500).json({ message: 'Server error fetching tribes' });
     }
 });
 
-// @route   DELETE /api/admin/tribes/:id
-// @desc    Delete a tribe
+// DELETE /api/admin/tribes/:id
 router.delete('/tribes/:id', async (req, res) => {
     try {
-        const tribe = await Tribe.findById(req.params.id);
+        const tribe = await Tribe.findByPk(req.params.id);
         if (!tribe) return res.status(404).json({ message: 'Tribe not found' });
 
-        // Cleanup: remove tribe from all users' tribes array
-        await User.updateMany(
-            { tribes: tribe._id },
-            { $pull: { tribes: tribe._id } }
-        );
+        // Remove all tribe_members — cascade should handle it, but be explicit
+        await sequelize.query('DELETE FROM tribe_members WHERE tribe_id = :tribeId', { replacements: { tribeId: req.params.id } });
 
-        await Tribe.findByIdAndDelete(req.params.id);
+        await Tribe.destroy({ where: { id: req.params.id } });
         res.json({ message: 'Tribe deleted successfully' });
     } catch (error) {
         console.error('Admin tribe delete error:', error);

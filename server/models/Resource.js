@@ -1,57 +1,27 @@
-import mongoose from 'mongoose';
+import { DataTypes } from 'sequelize';
+import sequelize from '../db.js';
 
-const resourceSchema = new mongoose.Schema({
-    tribe: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Tribe',
-        required: true
+const Resource = sequelize.define('Resource', {
+    id:          { type: DataTypes.INTEGER, autoIncrement: true, primaryKey: true },
+    tribeId:     { type: DataTypes.INTEGER, allowNull: false, field: 'tribe_id' },
+    name:        { type: DataTypes.STRING(200), allowNull: false },
+    description: { type: DataTypes.STRING(1000) },
+    type:        {
+        type: DataTypes.STRING(20), allowNull: false,
+        validate: { isIn: [['document','image','link','code']] }
     },
-    name: {
-        type: String,
-        required: true,
-        maxlength: 200
-    },
-    description: {
-        type: String,
-        maxlength: 1000
-    },
-    type: {
-        type: String,
-        enum: ['document', 'image', 'link', 'code'],
-        required: true
-    },
-    url: {
-        type: String,
-        required: true
-    },
-    category: {
-        type: String,
-        maxlength: 50
-    },
-    size: String, // e.g., "2.4 MB"
-    uploader: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'User',
-        required: true
-    },
-    downloads: {
-        type: Number,
-        default: 0
-    },
-    tags: [String],
-    isPublic: {
-        type: Boolean,
-        default: true
-    }
+    url:         { type: DataTypes.TEXT, allowNull: false },
+    category:    { type: DataTypes.STRING(50) },
+    size:        { type: DataTypes.STRING(50) },
+    uploaderId:  { type: DataTypes.INTEGER, allowNull: false, field: 'uploader_id' },
+    downloads:   { type: DataTypes.INTEGER, defaultValue: 0 },
+    isPublic:    { type: DataTypes.BOOLEAN, defaultValue: true, field: 'is_public' },
 }, {
-    timestamps: true
-})
-
-// Index for efficient queries
-resourceSchema.index({ tribe: 1, type: 1 })
-resourceSchema.index({ uploader: 1 })
-resourceSchema.index({ category: 1 })
-
-const Resource = mongoose.model('Resource', resourceSchema);
+    tableName: 'resources',
+    underscored: true,
+    timestamps: true,
+    createdAt: 'created_at',
+    updatedAt: 'updated_at',
+});
 
 export default Resource;

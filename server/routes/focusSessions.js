@@ -1,17 +1,13 @@
 import express from 'express';
 import { body, validationResult } from 'express-validator';
-import FocusSession from '../models/FocusSession.js';
-import { mockFocusSessions, mockUser } from '../utils/mockData.js';
+import { FocusSession, Task, Tribe } from '../models/associations.js';
+import { mockFocusSessions } from '../utils/mockData.js';
 import { protect } from '../middleware/auth.js';
 
 const router = express.Router();
-
-// All routes are protected
 router.use(protect);
 
-// @route   GET /api/focus-sessions
-// @desc    Get all focus sessions for current user
-// @access  Private
+// GET /api/focus-sessions
 router.get('/', async (req, res) => {
     try {
         const { status, limit } = req.query;
@@ -24,208 +20,155 @@ router.get('/', async (req, res) => {
             return res.json(sessions);
         }
 
-        const query = { user: req.user._id };
-        if (status) query.status = status;
+        const where = { userId: req.user.id };
+        if (status) where.status = status;
 
-        let queryBuilder = FocusSession.find(query)
-            .populate('task', 'title')
-            .populate('tribe', 'name color')
-            .sort({ startedAt: -1 });
+        const sessions = await FocusSession.findAll({
+            where,
+            include: [
+                { model: Task, as: 'task', attributes: ['id', 'title'] },
+                { model: Tribe, as: 'tribe', attributes: ['id', 'name', 'color'] },
+            ],
+            order: [['started_at', 'DESC']],
+            limit: limit ? parseInt(limit) : undefined,
+        });
 
-        if (limit) {
-            queryBuilder = queryBuilder.limit(parseInt(limit));
-        }
-
-        const sessions = await queryBuilder;
-
-        res.json(sessions);
+        res.json(sessions.map(s => ({ ...s.toJSON(), _id: s.id })));
     } catch (error) {
         console.error('Get focus sessions error:', error);
         res.status(500).json({ message: 'Server error' });
     }
 });
 
-// @route   GET /api/focus-sessions/:id
-// @desc    Get specific focus session
-// @access  Private
+// GET /api/focus-sessions/:id
 router.get('/:id', async (req, res) => {
     try {
         if (process.env.USE_MOCK_DATA === 'true') {
-            const session = mockFocusSessions.find(s => s._id === req.params.id);
-            if (!session) return res.status(404).json({ message: 'Focus session not found' });
-            return res.json(session);
+            const s = mockFocusSessions.find(s => s._id === req.params.id);
+            if (!s) return res.status(404).json({ message: 'Focus session not found' });
+            return res.json(s);
         }
 
         const session = await FocusSession.findOne({
-            _id: req.params.id,
-            user: req.user._id,
-        })
-            .populate('task', 'title')
-            .populate('tribe', 'name color');
+            where: { id: req.params.id, userId: req.user.id },
+            include: [
+                { model: Task, as: 'task', attributes: ['id', 'title'] },
+                { model: Tribe, as: 'tribe', attributes: ['id', 'name', 'color'] },
+            ],
+        });
+        if (!session) return res.status(404).json({ message: 'Focus session not found' });
 
-        if (!session) {
-            return res.status(404).json({ message: 'Focus session not found' });
-        }
-
-        res.json(session);
+        res.json({ ...session.toJSON(), _id: session.id });
     } catch (error) {
         console.error('Get focus session error:', error);
         res.status(500).json({ message: 'Server error' });
     }
 });
 
-// @route   POST /api/focus-sessions
-// @desc    Create/start new focus session
-// @access  Private
-router.post(
-    '/',
-    [
-        body('title').trim().notEmpty().withMessage('Title is required'),
-        body('plannedDuration').isInt({ min: 1 }).withMessage('Planned duration must be at least 1 minute'),
-    ],
-    async (req, res) => {
-        const errors = validationResult(req);
-        if (!errors.isEmpty()) {
-            return res.status(400).json({ errors: errors.array() });
+// POST /api/focus-sessions
+router.post('/', [
+    body('title').trim().notEmpty().withMessage('Title is required'),
+    body('plannedDuration').isInt({ min: 1 }).withMessage('Planned duration must be at least 1 minute'),
+], async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+    try {
+        if (process.env.USE_MOCK_DATA === 'true') {
+            const newS = { _id: `session-${Date.now()}`, ...req.body, userId: req.user.id, status: 'active', startTime: new Date().toISOString() };
+            mockFocusSessions.push(newS);
+            return res.status(201).json(newS);
         }
 
-        try {
-            if (process.env.USE_MOCK_DATA === 'true') {
-                const newSession = {
-                    _id: `session-${Date.now()}`,
-                    ...req.body,
-                    user: req.user._id,
-                    status: 'active',
-                    startTime: new Date().toISOString(),
-                    createdAt: new Date().toISOString(),
-                    updatedAt: new Date().toISOString()
-                };
-                mockFocusSessions.push(newSession);
-                return res.status(201).json(newSession);
-            }
+        const { title, description, plannedDuration, taskId, tribeId } = req.body;
+        const session = await FocusSession.create({ title, description, plannedDuration, taskId, tribeId, userId: req.user.id });
 
-            const session = await FocusSession.create({
-                ...req.body,
-                user: req.user._id,
-            });
-
-            await session.populate('task', 'title');
-            await session.populate('tribe', 'name color');
-
-            res.status(201).json(session);
-        } catch (error) {
-            console.error('Create focus session error:', error);
-            res.status(500).json({ message: 'Server error' });
-        }
+        const full = await FocusSession.findByPk(session.id, {
+            include: [
+                { model: Task, as: 'task', attributes: ['id', 'title'] },
+                { model: Tribe, as: 'tribe', attributes: ['id', 'name', 'color'] },
+            ],
+        });
+        res.status(201).json({ ...full.toJSON(), _id: full.id });
+    } catch (error) {
+        console.error('Create focus session error:', error);
+        res.status(500).json({ message: 'Server error' });
     }
-);
+});
 
-// @route   PUT /api/focus-sessions/:id
-// @desc    Update focus session
-// @access  Private
+// PUT /api/focus-sessions/:id
 router.put('/:id', async (req, res) => {
     try {
         if (process.env.USE_MOCK_DATA === 'true') {
-            const index = mockFocusSessions.findIndex(s => s._id === req.params.id);
-            if (index === -1) return res.status(404).json({ message: 'Focus session not found' });
-
-            const updatedSession = { ...mockFocusSessions[index], ...req.body, updatedAt: new Date().toISOString() };
-            mockFocusSessions[index] = updatedSession;
-            return res.json(updatedSession);
+            const idx = mockFocusSessions.findIndex(s => s._id === req.params.id);
+            if (idx === -1) return res.status(404).json({ message: 'Focus session not found' });
+            mockFocusSessions[idx] = { ...mockFocusSessions[idx], ...req.body };
+            return res.json(mockFocusSessions[idx]);
         }
 
-        const session = await FocusSession.findOne({
-            _id: req.params.id,
-            user: req.user._id,
-        });
+        const session = await FocusSession.findOne({ where: { id: req.params.id, userId: req.user.id } });
+        if (!session) return res.status(404).json({ message: 'Focus session not found' });
 
-        if (!session) {
-            return res.status(404).json({ message: 'Focus session not found' });
-        }
-
-        // Update allowed fields
-        const allowedUpdates = ['title', 'description', 'duration', 'status'];
-        allowedUpdates.forEach((field) => {
-            if (req.body[field] !== undefined) {
-                session[field] = req.body[field];
-            }
-        });
-
+        const allowed = ['title', 'description', 'duration', 'status'];
+        allowed.forEach(f => { if (req.body[f] !== undefined) session[f] = req.body[f]; });
         await session.save();
-        await session.populate('task', 'title');
-        await session.populate('tribe', 'name color');
 
-        res.json(session);
+        const full = await FocusSession.findByPk(session.id, {
+            include: [
+                { model: Task, as: 'task', attributes: ['id', 'title'] },
+                { model: Tribe, as: 'tribe', attributes: ['id', 'name', 'color'] },
+            ],
+        });
+        res.json({ ...full.toJSON(), _id: full.id });
     } catch (error) {
         console.error('Update focus session error:', error);
         res.status(500).json({ message: 'Server error' });
     }
 });
 
-// @route   PATCH /api/focus-sessions/:id/complete
-// @desc    Mark session as completed
-// @access  Private
+// PATCH /api/focus-sessions/:id/complete
 router.patch('/:id/complete', async (req, res) => {
     try {
         if (process.env.USE_MOCK_DATA === 'true') {
-            const index = mockFocusSessions.findIndex(s => s._id === req.params.id);
-            if (index === -1) return res.status(404).json({ message: 'Focus session not found' });
-
-            mockFocusSessions[index].status = 'completed';
-            if (req.body.duration) mockFocusSessions[index].duration = req.body.duration;
-            mockFocusSessions[index].endTime = new Date().toISOString();
-
-            return res.json(mockFocusSessions[index]);
+            const idx = mockFocusSessions.findIndex(s => s._id === req.params.id);
+            if (idx === -1) return res.status(404).json({ message: 'Focus session not found' });
+            mockFocusSessions[idx].status = 'completed';
+            if (req.body.duration) mockFocusSessions[idx].duration = req.body.duration;
+            return res.json(mockFocusSessions[idx]);
         }
 
-        const session = await FocusSession.findOne({
-            _id: req.params.id,
-            user: req.user._id,
-        });
-
-        if (!session) {
-            return res.status(404).json({ message: 'Focus session not found' });
-        }
+        const session = await FocusSession.findOne({ where: { id: req.params.id, userId: req.user.id } });
+        if (!session) return res.status(404).json({ message: 'Focus session not found' });
 
         session.status = 'completed';
-
-        // If duration is provided in the request, use it
-        if (req.body.duration) {
-            session.duration = req.body.duration;
-        }
-
+        if (req.body.duration) session.duration = req.body.duration;
         await session.save();
-        await session.populate('task', 'title');
-        await session.populate('tribe', 'name color');
 
-        res.json(session);
+        const full = await FocusSession.findByPk(session.id, {
+            include: [
+                { model: Task, as: 'task', attributes: ['id', 'title'] },
+                { model: Tribe, as: 'tribe', attributes: ['id', 'name', 'color'] },
+            ],
+        });
+        res.json({ ...full.toJSON(), _id: full.id });
     } catch (error) {
         console.error('Complete focus session error:', error);
         res.status(500).json({ message: 'Server error' });
     }
 });
 
-// @route   DELETE /api/focus-sessions/:id
-// @desc    Delete focus session
-// @access  Private
+// DELETE /api/focus-sessions/:id
 router.delete('/:id', async (req, res) => {
     try {
         if (process.env.USE_MOCK_DATA === 'true') {
-            const index = mockFocusSessions.findIndex(s => s._id === req.params.id);
-            if (index === -1) return res.status(404).json({ message: 'Focus session not found' });
-
-            mockFocusSessions.splice(index, 1);
+            const idx = mockFocusSessions.findIndex(s => s._id === req.params.id);
+            if (idx === -1) return res.status(404).json({ message: 'Focus session not found' });
+            mockFocusSessions.splice(idx, 1);
             return res.json({ message: 'Focus session deleted successfully' });
         }
 
-        const session = await FocusSession.findOneAndDelete({
-            _id: req.params.id,
-            user: req.user._id,
-        });
-
-        if (!session) {
-            return res.status(404).json({ message: 'Focus session not found' });
-        }
+        const destroyed = await FocusSession.destroy({ where: { id: req.params.id, userId: req.user.id } });
+        if (!destroyed) return res.status(404).json({ message: 'Focus session not found' });
 
         res.json({ message: 'Focus session deleted successfully' });
     } catch (error) {

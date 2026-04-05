@@ -1,185 +1,119 @@
 import express from 'express';
 import { body, validationResult } from 'express-validator';
-import User from '../models/User.js';
+import { User } from '../models/associations.js';
 import { protect, generateToken } from '../middleware/auth.js';
 
 const router = express.Router();
 
-// Helper: format user object for response (no password)
 const formatUser = (user) => ({
-    _id: user._id,
+    _id: user.id,
     name: user.name,
     email: user.email,
     avatar: user.avatar,
     checkInStreak: user.checkInStreak,
     dailyFocusGoal: user.dailyFocusGoal,
-    tribes: user.tribes,
     isAdmin: user.isAdmin,
 });
 
-// @route   POST /api/auth/register
-// @desc    Register a new user
-// @access  Public
-router.post(
-    '/register',
-    [
-        body('name').trim().notEmpty().withMessage('Name is required'),
-        body('email').isEmail().normalizeEmail().withMessage('Valid email is required'),
-        body('password')
-            .isLength({ min: 6 })
-            .withMessage('Password must be at least 6 characters'),
-    ],
-    async (req, res) => {
-        // Validate inputs
-        const errors = validationResult(req);
-        if (!errors.isEmpty()) {
-            return res.status(400).json({ message: errors.array()[0].msg, errors: errors.array() });
-        }
+// POST /api/auth/register
+router.post('/register', [
+    body('name').trim().notEmpty().withMessage('Name is required'),
+    body('email').isEmail().normalizeEmail().withMessage('Valid email is required'),
+    body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
+], async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ message: errors.array()[0].msg });
 
-        const { name, email, password } = req.body;
+    const { name, email, password } = req.body;
+    try {
+        const existingUser = await User.findOne({ where: { email } });
+        if (existingUser) return res.status(400).json({ message: 'An account with this email already exists' });
 
-        try {
-            // Check if user already exists
-            const existingUser = await User.findOne({ email });
-            if (existingUser) {
-                return res.status(400).json({ message: 'An account with this email already exists' });
-            }
+        const user = await User.create({ name, email, password });
+        const token = generateToken(user.id);
+        req.session.userId = user.id;
 
-            // Create user (password is hashed by pre-save hook in User model)
-            const user = await User.create({ name, email, password });
-
-            // Generate JWT token
-            const token = generateToken(user._id);
-
-            // Set server-side session
-            req.session.userId = user._id.toString();
-
-            return res.status(201).json({
-                user: formatUser(user),
-                token,
-            });
-        } catch (error) {
-            console.error('Registration error:', error);
-            return res.status(500).json({ message: 'Server error during registration' });
-        }
+        return res.status(201).json({ user: formatUser(user), token });
+    } catch (error) {
+        console.error('Registration error:', error);
+        return res.status(500).json({ message: 'Server error during registration' });
     }
-);
+});
 
-// @route   POST /api/auth/login
-// @desc    Authenticate user and return token + session
-// @access  Public
-router.post(
-    '/login',
-    [
-        body('email').isEmail().normalizeEmail().withMessage('Valid email is required'),
-        body('password').notEmpty().withMessage('Password is required'),
-    ],
-    async (req, res) => {
-        // Validate inputs
-        const errors = validationResult(req);
-        if (!errors.isEmpty()) {
-            return res.status(400).json({ message: errors.array()[0].msg, errors: errors.array() });
-        }
+// POST /api/auth/login
+router.post('/login', [
+    body('email').isEmail().normalizeEmail().withMessage('Valid email is required'),
+    body('password').notEmpty().withMessage('Password is required'),
+], async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ message: errors.array()[0].msg });
 
-        const { email, password } = req.body;
+    const { email, password } = req.body;
+    try {
+        // Include password for comparison
+        const user = await User.findOne({ where: { email } });
+        if (!user) return res.status(401).json({ message: 'Invalid email or password' });
 
-        try {
-            // Find user and include password field for comparison
-            const user = await User.findOne({ email }).select('+password');
-            if (!user) {
-                return res.status(401).json({ message: 'Invalid email or password' });
-            }
+        const isMatch = await user.comparePassword(password);
+        if (!isMatch) return res.status(401).json({ message: 'Invalid email or password' });
 
-            // Compare provided password with hashed password
-            const isMatch = await user.comparePassword(password);
-            if (!isMatch) {
-                return res.status(401).json({ message: 'Invalid email or password' });
-            }
+        const token = generateToken(user.id);
+        req.session.userId = user.id;
 
-            // Generate JWT token
-            const token = generateToken(user._id);
-
-            // Set server-side session
-            req.session.userId = user._id.toString();
-
-            return res.json({
-                user: formatUser(user),
-                token,
-            });
-        } catch (error) {
-            console.error('Login error:', error);
-            return res.status(500).json({ message: 'Server error during login' });
-        }
+        return res.json({ user: formatUser(user), token });
+    } catch (error) {
+        console.error('Login error:', error);
+        return res.status(500).json({ message: 'Server error during login' });
     }
-);
+});
 
-// @route   POST /api/auth/logout
-// @desc    Logout user — destroy server session
-// @access  Public
+// POST /api/auth/logout
 router.post('/logout', (req, res) => {
     req.session.destroy((err) => {
-        if (err) {
-            console.error('Session destroy error:', err);
-            return res.status(500).json({ message: 'Could not log out. Please try again.' });
-        }
-        res.clearCookie('connect.sid'); // Clear the session cookie
+        if (err) return res.status(500).json({ message: 'Could not log out. Please try again.' });
+        res.clearCookie('connect.sid');
         return res.json({ message: 'Logged out successfully' });
     });
 });
 
-// @route   GET /api/auth/me
-// @desc    Get current authenticated user's profile
-// @access  Private
+// GET /api/auth/me
 router.get('/me', protect, async (req, res) => {
     try {
         return res.json(formatUser(req.user));
     } catch (error) {
-        console.error('Get profile error:', error);
         return res.status(500).json({ message: 'Server error' });
     }
 });
 
-// @route   PUT /api/auth/profile
-// @desc    Update user profile
-// @access  Private
-router.put(
-    '/profile',
-    protect,
-    [
-        body('name').optional().trim().notEmpty().withMessage('Name cannot be empty'),
-        body('email').optional().isEmail().normalizeEmail().withMessage('Valid email is required'),
-        body('dailyFocusGoal').optional().isNumeric().withMessage('Daily focus goal must be a number'),
-    ],
-    async (req, res) => {
-        const errors = validationResult(req);
-        if (!errors.isEmpty()) {
-            return res.status(400).json({ errors: errors.array() });
-        }
+// PUT /api/auth/profile
+router.put('/profile', protect, [
+    body('name').optional().trim().notEmpty().withMessage('Name cannot be empty'),
+    body('email').optional().isEmail().normalizeEmail().withMessage('Valid email is required'),
+    body('dailyFocusGoal').optional().isNumeric().withMessage('Daily focus goal must be a number'),
+], async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
-        const { name, email, dailyFocusGoal } = req.body;
+    const { name, email, dailyFocusGoal } = req.body;
+    try {
+        const user = await User.findByPk(req.user.id);
 
-        try {
-            const user = await User.findById(req.user._id);
-
-            if (name) user.name = name;
-            if (email) {
-                // Check if email already exists for another user
-                const existingUser = await User.findOne({ email });
-                if (existingUser && existingUser._id.toString() !== req.user._id.toString()) {
-                    return res.status(400).json({ message: 'Email already in use' });
-                }
-                user.email = email;
+        if (name) user.name = name;
+        if (email) {
+            const existingUser = await User.findOne({ where: { email } });
+            if (existingUser && existingUser.id !== req.user.id) {
+                return res.status(400).json({ message: 'Email already in use' });
             }
-            if (dailyFocusGoal !== undefined) user.dailyFocusGoal = dailyFocusGoal;
-
-            await user.save();
-
-            res.json(formatUser(user));
-        } catch (error) {
-            console.error('Update profile error:', error);
-            res.status(500).json({ message: 'Server error' });
+            user.email = email;
         }
+        if (dailyFocusGoal !== undefined) user.dailyFocusGoal = dailyFocusGoal;
+
+        await user.save();
+        res.json(formatUser(user));
+    } catch (error) {
+        console.error('Update profile error:', error);
+        res.status(500).json({ message: 'Server error' });
     }
-);
+});
 
 export default router;

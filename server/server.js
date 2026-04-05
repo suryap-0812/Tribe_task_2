@@ -1,13 +1,14 @@
 import express from 'express';
-import mongoose from 'mongoose';
 import cors from 'cors';
 import session from 'express-session';
-import MongoStore from 'connect-mongo';
+import pgSession from 'connect-pg-simple';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import jwt from 'jsonwebtoken';
-import User from './models/User.js';
 import 'dotenv/config';
+
+import sequelize from './db.js';
+import { User } from './models/associations.js'; // loads all models + relations
 
 // Import routes
 import authRoutes from './routes/auth.js';
@@ -31,42 +32,39 @@ const PORT = process.env.PORT || 5000;
 // Middleware
 app.use(cors({
     origin: process.env.CLIENT_URL || 'http://localhost:5173',
-    credentials: true, // Allow cookies to be sent cross-origin
+    credentials: true,
 }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// MongoDB connection
-const connectDB = async () => {
-    try {
-        console.log('Connecting to MongoDB Atlas...');
-        await mongoose.connect(process.env.MONGODB_URI);
-        console.log('✅ MongoDB connected successfully');
-        console.log(`📊 Database: ${mongoose.connection.name}`);
-    } catch (error) {
-        console.error('❌ MongoDB connection error:', error);
-        process.exit(1);
-    }
-};
+// PostgreSQL connection
+try {
+    await sequelize.authenticate();
+    console.log('✅ PostgreSQL connected successfully');
+    // Do NOT sync — tables were created manually in Step 1
+} catch (error) {
+    console.error('❌ PostgreSQL connection error:', error);
+    process.exit(1);
+}
 
-// Connect to database
-connectDB();
+// Session middleware (PostgreSQL store)
+const PgStore = pgSession(session);
+const connectionString = `postgres://${process.env.DB_USER}:${encodeURIComponent(process.env.DB_PASSWORD || '')}@${process.env.DB_HOST}:${process.env.DB_PORT}/${process.env.DB_NAME}`;
 
-// Session middleware (uses MongoDB Atlas as session store)
 app.use(
     session({
+        store: new PgStore({
+            conString: connectionString,
+            tableName: 'session',
+            createTableIfMissing: true,
+        }),
         secret: process.env.SESSION_SECRET,
         resave: false,
         saveUninitialized: false,
-        store: MongoStore.create({
-            mongoUrl: process.env.MONGODB_URI,
-            collectionName: 'sessions',
-            ttl: 7 * 24 * 60 * 60, // 7 days in seconds
-        }),
         cookie: {
             httpOnly: true,
-            secure: process.env.NODE_ENV === 'production', // HTTPS only in production
-            maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days in ms
+            secure: process.env.NODE_ENV === 'production',
+            maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
             sameSite: 'lax',
         },
     })
@@ -80,9 +78,9 @@ app.use('/api/focus-sessions', focusSessionRoutes);
 app.use('/api/stats', statsRoutes);
 app.use('/api/admin', adminRoutes);
 
-// Health check route
+// Health check
 app.get('/api/health', (req, res) => {
-    res.json({ status: 'OK', message: 'TribeTask API is running' });
+    res.json({ status: 'OK', message: 'TribeTask API is running (PostgreSQL)' });
 });
 
 // 404 handler
@@ -90,7 +88,7 @@ app.use((req, res) => {
     res.status(404).json({ message: 'Route not found' });
 });
 
-// Error handling middleware
+// Error handler
 app.use((err, req, res, next) => {
     console.error('Error:', err);
     res.status(err.status || 500).json({
@@ -99,20 +97,17 @@ app.use((err, req, res, next) => {
     });
 });
 
-// Socket.io Authentication Middleware
+// Socket.io authentication
 io.use(async (socket, next) => {
     try {
         const token = socket.handshake.auth.token || socket.handshake.query.token;
-        if (!token) {
-            return next(new Error('Authentication error: No token provided'));
-        }
+        if (!token) return next(new Error('Authentication error: No token provided'));
 
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        const user = await User.findById(decoded.id).select('-password');
-
-        if (!user) {
-            return next(new Error('Authentication error: User not found'));
-        }
+        const user = await User.findByPk(decoded.id, {
+            attributes: { exclude: ['password'] }
+        });
+        if (!user) return next(new Error('Authentication error: User not found'));
 
         socket.data.user = user;
         next();
@@ -121,27 +116,23 @@ io.use(async (socket, next) => {
     }
 });
 
-// Socket.io logic
+// Socket.io events
 io.on('connection', (socket) => {
     console.log('🔌 New client connected:', socket.id);
 
     socket.on('join_tribe', (tribeId) => {
         socket.join(tribeId);
-        console.log(`👤 User ${socket.id} joined tribe room: ${tribeId}`);
     });
 
     socket.on('leave_tribe', (tribeId) => {
         socket.leave(tribeId);
-        console.log(`👤 User ${socket.id} left tribe room: ${tribeId}`);
     });
 
     socket.on('send_message', (data) => {
-        // Broadcast message to everyone in the tribe room
         io.to(data.tribeId).emit('receive_message', data.message);
     });
 
     socket.on('send_reaction', (data) => {
-        // Broadcast reaction to everyone in the tribe room
         io.to(data.tribeId).emit('receive_reaction', {
             messageId: data.messageId,
             message: data.message

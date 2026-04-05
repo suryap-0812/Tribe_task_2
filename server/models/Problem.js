@@ -1,86 +1,46 @@
-import mongoose from 'mongoose';
+import { DataTypes } from 'sequelize';
+import sequelize from '../db.js';
 
-const solutionSchema = new mongoose.Schema({
-    author: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'User',
-        required: true
+const Problem = sequelize.define('Problem', {
+    id:          { type: DataTypes.INTEGER, autoIncrement: true, primaryKey: true },
+    tribeId:     { type: DataTypes.INTEGER, allowNull: false, field: 'tribe_id' },
+    title:       { type: DataTypes.STRING(200), allowNull: false },
+    description: { type: DataTypes.STRING(2000), allowNull: false },
+    category:    {
+        type: DataTypes.STRING(20), defaultValue: 'other',
+        validate: { isIn: [['technical','design','process','other']] }
     },
-    content: {
-        type: String,
-        required: true,
-        maxlength: 1000
+    status:      {
+        type: DataTypes.STRING(20), defaultValue: 'open',
+        validate: { isIn: [['open','discussing','resolved']] }
     },
-    votes: {
-        type: Number,
-        default: 0
-    },
-    voters: [{
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'User'
-    }],
-    accepted: {
-        type: Boolean,
-        default: false
-    }
+    creatorId:   { type: DataTypes.INTEGER, allowNull: false, field: 'creator_id' },
+    votes:       { type: DataTypes.INTEGER, defaultValue: 0 },
+    resolvedAt:  { type: DataTypes.DATE, field: 'resolved_at' },
+    resolvedBy:  { type: DataTypes.INTEGER, field: 'resolved_by' },
 }, {
-    timestamps: true
-})
+    tableName: 'problems',
+    underscored: true,
+    timestamps: true,
+    createdAt: 'created_at',
+    updatedAt: 'updated_at',
+});
 
-const problemSchema = new mongoose.Schema({
-    tribe: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Tribe',
-        required: true
-    },
-    title: {
-        type: String,
-        required: true,
-        maxlength: 200
-    },
-    description: {
-        type: String,
-        required: true,
-        maxlength: 2000
-    },
-    category: {
-        type: String,
-        enum: ['technical', 'design', 'process', 'other'],
-        default: 'other'
-    },
-    status: {
-        type: String,
-        enum: ['open', 'discussing', 'resolved'],
-        default: 'open'
-    },
-    creator: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'User',
-        required: true
-    },
-    solutions: [solutionSchema],
-    votes: {
-        type: Number,
-        default: 0
-    },
-    voters: [{
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'User'
-    }],
-    resolvedAt: Date,
-    resolvedBy: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'User'
-    }
+// Problem solutions sub-table
+const ProblemSolution = sequelize.define('ProblemSolution', {
+    id:        { type: DataTypes.INTEGER, autoIncrement: true, primaryKey: true },
+    problemId: { type: DataTypes.INTEGER, allowNull: false, field: 'problem_id' },
+    authorId:  { type: DataTypes.INTEGER, allowNull: false, field: 'author_id' },
+    content:   { type: DataTypes.STRING(1000), allowNull: false },
+    votes:     { type: DataTypes.INTEGER, defaultValue: 0 },
+    accepted:  { type: DataTypes.BOOLEAN, defaultValue: false },
 }, {
-    timestamps: true
-})
+    tableName: 'problem_solutions',
+    underscored: true,
+    timestamps: true,
+    createdAt: 'created_at',
+    updatedAt: 'updated_at',
+});
 
-// Index for efficient queries
-problemSchema.index({ tribe: 1, status: 1 })
-problemSchema.index({ creator: 1 })
-problemSchema.index({ category: 1 })
-
-const Problem = mongoose.model('Problem', problemSchema);
-
+export { Problem, ProblemSolution };
 export default Problem;

@@ -1,73 +1,37 @@
-import mongoose from 'mongoose';
+import { DataTypes } from 'sequelize';
+import sequelize from '../db.js';
 
-const focusSessionSchema = new mongoose.Schema(
-    {
-        title: {
-            type: String,
-            required: [true, 'Focus session title is required'],
-            trim: true,
-        },
-        description: {
-            type: String,
-            trim: true,
-        },
-        duration: {
-            type: Number, // Actual duration in minutes
-            default: 0,
-        },
-        plannedDuration: {
-            type: Number, // Planned duration in minutes
-            required: [true, 'Planned duration is required'],
-        },
-        user: {
-            type: mongoose.Schema.Types.ObjectId,
-            ref: 'User',
-            required: true,
-        },
-        task: {
-            type: mongoose.Schema.Types.ObjectId,
-            ref: 'Task',
-        },
-        tribe: {
-            type: mongoose.Schema.Types.ObjectId,
-            ref: 'Tribe',
-        },
-        status: {
-            type: String,
-            enum: ['active', 'completed', 'cancelled'],
-            default: 'active',
-        },
-        startedAt: {
-            type: Date,
-            default: Date.now,
-        },
-        completedAt: {
-            type: Date,
-        },
+const FocusSession = sequelize.define('FocusSession', {
+    id:              { type: DataTypes.INTEGER, autoIncrement: true, primaryKey: true },
+    title:           { type: DataTypes.STRING(255), allowNull: false },
+    description:     { type: DataTypes.TEXT },
+    duration:        { type: DataTypes.INTEGER, defaultValue: 0 },
+    plannedDuration: { type: DataTypes.INTEGER, allowNull: false, field: 'planned_duration' },
+    userId:          { type: DataTypes.INTEGER, allowNull: false, field: 'user_id' },
+    taskId:          { type: DataTypes.INTEGER, field: 'task_id' },
+    tribeId:         { type: DataTypes.INTEGER, field: 'tribe_id' },
+    status:          {
+        type: DataTypes.STRING(20), defaultValue: 'active',
+        validate: { isIn: [['active','completed','cancelled']] }
     },
-    {
-        timestamps: true,
-    }
-);
-
-// Update duration when session is completed
-focusSessionSchema.pre('save', function (next) {
-    if (this.isModified('status') && this.status === 'completed' && !this.completedAt) {
-        this.completedAt = new Date();
-
-        // Calculate actual duration if not set
-        if (!this.duration || this.duration === 0) {
-            const durationMs = this.completedAt - this.startedAt;
-            this.duration = Math.round(durationMs / (1000 * 60)); // Convert to minutes
-        }
-    }
-    next();
+    startedAt:       { type: DataTypes.DATE, defaultValue: DataTypes.NOW, field: 'started_at' },
+    completedAt:     { type: DataTypes.DATE, field: 'completed_at' },
+}, {
+    tableName: 'focus_sessions',
+    underscored: true,
+    timestamps: true,
+    createdAt: 'created_at',
+    updatedAt: 'updated_at',
 });
 
-// Index for faster queries
-focusSessionSchema.index({ user: 1, status: 1 });
-focusSessionSchema.index({ user: 1, startedAt: -1 });
-
-const FocusSession = mongoose.model('FocusSession', focusSessionSchema);
+FocusSession.beforeSave((session) => {
+    if (session.changed('status') && session.status === 'completed' && !session.completedAt) {
+        session.completedAt = new Date();
+        if (!session.duration || session.duration === 0) {
+            const ms = session.completedAt - session.startedAt;
+            session.duration = Math.round(ms / 60000);
+        }
+    }
+});
 
 export default FocusSession;

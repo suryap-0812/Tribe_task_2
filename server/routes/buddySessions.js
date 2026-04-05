@@ -1,145 +1,144 @@
 import express from 'express';
-import BuddySession from '../models/BuddySession.js';
+import { BuddySession, User } from '../models/associations.js';
 import { protect } from '../middleware/auth.js';
+import { Op } from 'sequelize';
+import sequelize from '../db.js';
 
 const router = express.Router({ mergeParams: true });
 
-// Get all buddy sessions for a tribe
+// GET all buddy sessions for tribe
 router.get('/', protect, async (req, res) => {
     try {
         const { tribeId } = req.params;
         const { status, userId } = req.query;
 
-        const query = { tribe: tribeId };
-        if (status) query.status = status;
-        if (userId) query.participants = userId;
+        const where = { tribeId };
+        if (status) where.status = status;
 
-        const sessions = await BuddySession.find(query)
-            .populate('participants', 'name avatar email')
-            .sort({ startTime: -1 });
+        let sessions = await BuddySession.findAll({
+            where,
+            include: [{ model: User, as: 'participants', attributes: ['id', 'name', 'avatar', 'email'], through: { attributes: [] } }],
+            order: [['start_time', 'DESC']],
+        });
 
-        res.json({ sessions });
+        // Filter by participant if requested
+        if (userId) {
+            sessions = sessions.filter(s => s.participants.some(p => p.id == userId));
+        }
+
+        res.json({ sessions: sessions.map(s => ({ ...s.toJSON(), _id: s.id })) });
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
 });
 
-// Start a buddy session
+// POST start a buddy session
 router.post('/', protect, async (req, res) => {
     try {
         const { tribeId } = req.params;
         const { buddyId } = req.body;
 
-        const session = await BuddySession.create({
-            tribe: tribeId,
-            participants: [req.user._id, buddyId],
-            startTime: new Date()
-        });
+        const session = await BuddySession.create({ tribeId, startTime: new Date() });
+        await session.setParticipants([req.user.id, buddyId]);
 
-        await session.populate('participants', 'name avatar email');
-        res.status(201).json({ session });
+        const full = await BuddySession.findByPk(session.id, {
+            include: [{ model: User, as: 'participants', attributes: ['id', 'name', 'avatar', 'email'], through: { attributes: [] } }],
+        });
+        res.status(201).json({ session: { ...full.toJSON(), _id: full.id } });
     } catch (error) {
         res.status(400).json({ message: error.message });
     }
 });
 
-// Get active session for user
+// GET active session for user
 router.get('/active', protect, async (req, res) => {
     try {
         const { tribeId } = req.params;
 
-        const session = await BuddySession.findOne({
-            tribe: tribeId,
-            participants: req.user._id,
-            status: { $in: ['active', 'paused'] }
-        }).populate('participants', 'name avatar email');
+        const sessions = await BuddySession.findAll({
+            where: { tribeId, status: { [Op.in]: ['active', 'paused'] } },
+            include: [{ model: User, as: 'participants', attributes: ['id', 'name', 'avatar', 'email'], through: { attributes: [] } }],
+        });
 
-        res.json({ session });
+        const active = sessions.find(s => s.participants.some(p => p.id === req.user.id));
+        res.json({ session: active ? { ...active.toJSON(), _id: active.id } : null });
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
 });
 
-// Update session status (pause/resume)
+// PATCH update session status
 router.patch('/:sessionId/status', protect, async (req, res) => {
     try {
         const { sessionId } = req.params;
         const { status } = req.body;
 
-        const session = await BuddySession.findById(sessionId);
-        if (!session) {
-            return res.status(404).json({ message: 'Session not found' });
-        }
-
-        // Check if user is a participant
-        if (!session.participants.includes(req.user._id)) {
-            return res.status(403).json({ message: 'Not authorized' });
-        }
+        const session = await BuddySession.findByPk(sessionId, {
+            include: [{ model: User, as: 'participants', through: { attributes: [] } }],
+        });
+        if (!session) return res.status(404).json({ message: 'Session not found' });
+        if (!session.participants.some(p => p.id === req.user.id)) return res.status(403).json({ message: 'Not authorized' });
 
         if (status === 'paused' && session.status === 'active') {
             session.pausedAt = new Date();
         } else if (status === 'active' && session.status === 'paused') {
-            // Calculate pause duration
-            const pauseDuration = Math.floor((new Date() - session.pausedAt) / 60000);
-            session.pauseDuration += pauseDuration;
+            const pauseMin = Math.floor((new Date() - session.pausedAt) / 60000);
+            session.pauseDuration += pauseMin;
         }
 
         session.status = status;
         await session.save();
 
-        res.json({ session });
+        res.json({ session: { ...session.toJSON(), _id: session.id } });
     } catch (error) {
         res.status(400).json({ message: error.message });
     }
 });
 
-// End a buddy session
+// POST end session
 router.post('/:sessionId/end', protect, async (req, res) => {
     try {
         const { sessionId } = req.params;
         const { tasksCompleted, notes } = req.body;
 
-        const session = await BuddySession.findById(sessionId);
-        if (!session) {
-            return res.status(404).json({ message: 'Session not found' });
-        }
-
-        // Check if user is a participant
-        if (!session.participants.includes(req.user._id)) {
-            return res.status(403).json({ message: 'Not authorized' });
-        }
+        const session = await BuddySession.findByPk(sessionId, {
+            include: [{ model: User, as: 'participants', through: { attributes: [] } }],
+        });
+        if (!session) return res.status(404).json({ message: 'Session not found' });
+        if (!session.participants.some(p => p.id === req.user.id)) return res.status(403).json({ message: 'Not authorized' });
 
         session.endTime = new Date();
         session.status = 'completed';
         session.tasksCompleted = tasksCompleted || 0;
         session.notes = notes;
         session.calculateDuration();
-
         await session.save();
-        await session.populate('participants', 'name avatar email');
 
-        res.json({ session });
+        const full = await BuddySession.findByPk(session.id, {
+            include: [{ model: User, as: 'participants', attributes: ['id', 'name', 'avatar', 'email'], through: { attributes: [] } }],
+        });
+        res.json({ session: { ...full.toJSON(), _id: full.id } });
     } catch (error) {
         res.status(400).json({ message: error.message });
     }
 });
 
-// Get session history for user
+// GET session history
 router.get('/history', protect, async (req, res) => {
     try {
         const { tribeId } = req.params;
         const { limit = 20 } = req.query;
 
-        const sessions = await BuddySession.find({
-            tribe: tribeId,
-            participants: req.user._id,
-            status: 'completed'
-        })
-            .populate('participants', 'name avatar email')
-            .sort({ endTime: -1 })
-            .limit(parseInt(limit));
+        const sessions = await BuddySession.findAll({
+            where: { tribeId, status: 'completed' },
+            include: [{ model: User, as: 'participants', attributes: ['id', 'name', 'avatar', 'email'], through: { attributes: [] } }],
+            order: [['end_time', 'DESC']],
+            limit: parseInt(limit),
+        });
 
-        res.json({ sessions });
+        // Only return sessions where the user is a participant
+        const filtered = sessions.filter(s => s.participants.some(p => p.id === req.user.id));
+        res.json({ sessions: filtered.map(s => ({ ...s.toJSON(), _id: s.id })) });
     } catch (error) {
         res.status(500).json({ message: error.message });
     }

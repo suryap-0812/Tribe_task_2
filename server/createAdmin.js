@@ -1,17 +1,17 @@
-import mongoose from 'mongoose';
-import User from './models/User.js';
+import sequelize from './db.js';
+import { User } from './models/associations.js';
 import 'dotenv/config';
 
 const createAdmin = async () => {
     try {
-        await mongoose.connect(process.env.MONGODB_URI);
-        console.log('Connected to MongoDB');
+        await sequelize.authenticate();
+        console.log('Connected to PostgreSQL');
 
         const adminEmail = 'adminmain@admin.pom';
         const adminPassword = 'adminmain123';
 
         // Check if admin already exists
-        let admin = await User.findOne({ email: adminEmail });
+        let admin = await User.findOne({ where: { email: adminEmail } });
 
         if (admin) {
             console.log('Admin already exists. Updating permissions...');
@@ -20,17 +20,16 @@ const createAdmin = async () => {
             console.log('✅ Admin permissions updated');
         } else {
             console.log('Creating new Admin user...');
-            admin = new User({
+            admin = await User.create({
                 name: 'System Admin',
                 email: adminEmail,
                 password: adminPassword,
                 isAdmin: true
             });
-            await admin.save();
             console.log('✅ Admin user created successfully');
         }
 
-        mongoose.connection.close();
+        await sequelize.close();
     } catch (error) {
         console.error('❌ Error creating admin:', error);
         process.exit(1);

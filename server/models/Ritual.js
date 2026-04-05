@@ -1,77 +1,42 @@
-import mongoose from 'mongoose';
+import { DataTypes } from 'sequelize';
+import sequelize from '../db.js';
 
-const attendanceSchema = new mongoose.Schema({
-    userId: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'User',
-        required: true
+const Ritual = sequelize.define('Ritual', {
+    id:             { type: DataTypes.INTEGER, autoIncrement: true, primaryKey: true },
+    tribeId:        { type: DataTypes.INTEGER, allowNull: false, field: 'tribe_id' },
+    name:           { type: DataTypes.STRING(100), allowNull: false },
+    description:    { type: DataTypes.STRING(500) },
+    scheduleType:   {
+        type: DataTypes.STRING(10), allowNull: false,
+        field: 'schedule_type',
+        validate: { isIn: [['daily','weekly','custom']] }
     },
-    date: {
-        type: Date,
-        required: true,
-        default: Date.now
-    }
-}, { _id: false })
-
-const ritualSchema = new mongoose.Schema({
-    tribe: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Tribe',
-        required: true
-    },
-    name: {
-        type: String,
-        required: true,
-        maxlength: 100
-    },
-    description: {
-        type: String,
-        maxlength: 500
-    },
-    schedule: {
-        type: {
-            type: String,
-            enum: ['daily', 'weekly', 'custom'],
-            required: true
-        },
-        time: {
-            type: String, // Format: "HH:MM"
-            required: true
-        },
-        day: String, // For weekly: 'Monday', 'Tuesday', etc.
-        days: [String] // For custom: ['Mon', 'Wed', 'Fri']
-    },
-    badge: {
-        type: String,
-        default: '✨'
-    },
-    participants: [{
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'User'
-    }],
-    attendance: [attendanceSchema],
-    streak: {
-        type: Number,
-        default: 0
-    },
-    nextOccurrence: Date,
-    isActive: {
-        type: Boolean,
-        default: true
-    },
-    createdBy: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'User',
-        required: true
-    }
+    scheduleTime:   { type: DataTypes.STRING(5), allowNull: false, field: 'schedule_time' },
+    scheduleDay:    { type: DataTypes.STRING(20), field: 'schedule_day' },
+    badge:          { type: DataTypes.STRING(10), defaultValue: '✨' },
+    streak:         { type: DataTypes.INTEGER, defaultValue: 0 },
+    nextOccurrence: { type: DataTypes.DATE, field: 'next_occurrence' },
+    isActive:       { type: DataTypes.BOOLEAN, defaultValue: true, field: 'is_active' },
+    createdBy:      { type: DataTypes.INTEGER, field: 'created_by' },
 }, {
-    timestamps: true
-})
+    tableName: 'rituals',
+    underscored: true,
+    timestamps: true,
+    createdAt: 'created_at',
+    updatedAt: 'updated_at',
+});
 
-// Index for efficient queries
-ritualSchema.index({ tribe: 1, isActive: 1 })
-ritualSchema.index({ nextOccurrence: 1 })
+// Ritual attendance sub-table
+const RitualAttendance = sequelize.define('RitualAttendance', {
+    id:       { type: DataTypes.INTEGER, autoIncrement: true, primaryKey: true },
+    ritualId: { type: DataTypes.INTEGER, allowNull: false, field: 'ritual_id' },
+    userId:   { type: DataTypes.INTEGER, allowNull: false, field: 'user_id' },
+    date:     { type: DataTypes.DATE, defaultValue: DataTypes.NOW },
+}, {
+    tableName: 'ritual_attendance',
+    underscored: true,
+    timestamps: false,
+});
 
-const Ritual = mongoose.model('Ritual', ritualSchema);
-
+export { Ritual, RitualAttendance };
 export default Ritual;

@@ -1,17 +1,20 @@
 import express from 'express';
 import { body, validationResult } from 'express-validator';
-import Task from '../models/Task.js';
+import { Task, Tribe, TaskTag } from '../models/associations.js';
 import { mockTasks } from '../utils/mockData.js';
 import { protect } from '../middleware/auth.js';
+import { Op } from 'sequelize';
 
 const router = express.Router();
-
-// All routes are protected
 router.use(protect);
 
-// @route   GET /api/tasks
-// @desc    Get all tasks for current user
-// @access  Private
+// Helper: build task response with tags
+const formatTask = async (task) => {
+    const tags = await TaskTag.findAll({ where: { task_id: task.id } });
+    return { ...task.toJSON(), _id: task.id, tags: tags.map(t => t.tag) };
+};
+
+// GET /api/tasks
 router.get('/', async (req, res) => {
     try {
         const { status, tribe, priority, starred } = req.query;
@@ -25,28 +28,27 @@ router.get('/', async (req, res) => {
             return res.json(tasks);
         }
 
-        // Build query
-        const query = { user: req.user._id };
+        const where = { userId: req.user.id };
+        if (status) where.status = status;
+        if (tribe) where.tribeId = tribe;
+        if (priority) where.priority = priority;
+        if (starred === 'true') where.starred = true;
 
-        if (status) query.status = status;
-        if (tribe) query.tribe = tribe;
-        if (priority) query.priority = priority;
-        if (starred === 'true') query.starred = true;
+        const tasks = await Task.findAll({
+            where,
+            include: [{ model: Tribe, as: 'tribe', attributes: ['id', 'name', 'color'] }],
+            order: [['due_date', 'ASC NULLS LAST'], ['created_at', 'DESC']],
+        });
 
-        const tasks = await Task.find(query)
-            .populate('tribe', 'name color')
-            .sort({ dueDate: 1, createdAt: -1 });
-
-        res.json(tasks);
+        const result = await Promise.all(tasks.map(formatTask));
+        res.json(result);
     } catch (error) {
         console.error('Get tasks error:', error);
         res.status(500).json({ message: 'Server error' });
     }
 });
 
-// @route   GET /api/tasks/:id
-// @desc    Get specific task
-// @access  Private
+// GET /api/tasks/:id
 router.get('/:id', async (req, res) => {
     try {
         if (process.env.USE_MOCK_DATA === 'true') {
@@ -56,200 +58,152 @@ router.get('/:id', async (req, res) => {
         }
 
         const task = await Task.findOne({
-            _id: req.params.id,
-            user: req.user._id,
-        }).populate('tribe', 'name color');
+            where: { id: req.params.id, userId: req.user.id },
+            include: [{ model: Tribe, as: 'tribe', attributes: ['id', 'name', 'color'] }],
+        });
+        if (!task) return res.status(404).json({ message: 'Task not found' });
 
-        if (!task) {
-            return res.status(404).json({ message: 'Task not found' });
-        }
-
-        res.json(task);
+        res.json(await formatTask(task));
     } catch (error) {
         console.error('Get task error:', error);
         res.status(500).json({ message: 'Server error' });
     }
 });
 
-// @route   POST /api/tasks
-// @desc    Create new task
-// @access  Private
-router.post(
-    '/',
-    [
-        body('title').trim().notEmpty().withMessage('Title is required'),
-        body('priority').optional().isIn(['low', 'medium', 'high']),
-        body('status').optional().isIn(['pending', 'in-progress', 'completed']),
-    ],
-    async (req, res) => {
-        const errors = validationResult(req);
-        if (!errors.isEmpty()) {
-            return res.status(400).json({ errors: errors.array() });
+// POST /api/tasks
+router.post('/', [
+    body('title').trim().notEmpty().withMessage('Title is required'),
+    body('priority').optional().isIn(['low', 'medium', 'high']),
+    body('status').optional().isIn(['pending', 'in-progress', 'completed']),
+], async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+    try {
+        if (process.env.USE_MOCK_DATA === 'true') {
+            const newTask = { _id: `task-${Date.now()}`, ...req.body, user: req.user.id, createdAt: new Date().toISOString() };
+            mockTasks.push(newTask);
+            return res.status(201).json(newTask);
         }
 
-        try {
-            if (process.env.USE_MOCK_DATA === 'true') {
-                const newTask = {
-                    _id: `task-${Date.now()}`,
-                    ...req.body,
-                    user: req.user._id,
-                    createdAt: new Date().toISOString(),
-                    updatedAt: new Date().toISOString()
-                };
-                mockTasks.push(newTask);
-                return res.status(201).json(newTask);
-            }
+        const { title, description, priority, status, dueDate, tribeId, tags, isGroupTask, assignedRole } = req.body;
+        const task = await Task.create({ title, description, priority, status, dueDate, tribeId, userId: req.user.id, isGroupTask, assignedRole });
 
-            const task = await Task.create({
-                ...req.body,
-                user: req.user._id,
-            });
-
-            await task.populate('tribe', 'name color');
-
-            res.status(201).json(task);
-        } catch (error) {
-            console.error('Create task error:', error);
-            res.status(500).json({ message: error.message || 'Server error' });
+        // Save tags
+        if (tags && tags.length > 0) {
+            await TaskTag.bulkCreate(tags.map(tag => ({ task_id: task.id, tag })));
         }
+
+        const fullTask = await Task.findByPk(task.id, {
+            include: [{ model: Tribe, as: 'tribe', attributes: ['id', 'name', 'color'] }],
+        });
+        res.status(201).json(await formatTask(fullTask));
+    } catch (error) {
+        console.error('Create task error:', error);
+        res.status(500).json({ message: error.message || 'Server error' });
     }
-);
+});
 
-// @route   PUT /api/tasks/:id
-// @desc    Update task
-// @access  Private
+// PUT /api/tasks/:id
 router.put('/:id', async (req, res) => {
     try {
         if (process.env.USE_MOCK_DATA === 'true') {
-            const taskIndex = mockTasks.findIndex(t => t._id === req.params.id);
-            if (taskIndex === -1) return res.status(404).json({ message: 'Task not found' });
-
-            const updatedTask = { ...mockTasks[taskIndex], ...req.body, updatedAt: new Date().toISOString() };
-            mockTasks[taskIndex] = updatedTask;
-            return res.json(updatedTask);
+            const idx = mockTasks.findIndex(t => t._id === req.params.id);
+            if (idx === -1) return res.status(404).json({ message: 'Task not found' });
+            mockTasks[idx] = { ...mockTasks[idx], ...req.body, updatedAt: new Date().toISOString() };
+            return res.json(mockTasks[idx]);
         }
 
-        const task = await Task.findOne({
-            _id: req.params.id,
-            user: req.user._id,
-        });
+        const task = await Task.findOne({ where: { id: req.params.id, userId: req.user.id } });
+        if (!task) return res.status(404).json({ message: 'Task not found' });
 
-        if (!task) {
-            return res.status(404).json({ message: 'Task not found' });
-        }
-
-        // Update fields
-        const allowedUpdates = ['title', 'description', 'priority', 'status', 'dueDate', 'tribe', 'starred', 'tags', 'completed'];
-        allowedUpdates.forEach((field) => {
-            if (req.body[field] !== undefined) {
-                task[field] = req.body[field];
-            }
-        });
-
+        const allowedUpdates = ['title', 'description', 'priority', 'status', 'dueDate', 'tribeId', 'starred', 'completed'];
+        allowedUpdates.forEach(field => { if (req.body[field] !== undefined) task[field] = req.body[field]; });
         await task.save();
-        await task.populate('tribe', 'name color');
 
-        res.json(task);
+        // Update tags if provided
+        if (req.body.tags !== undefined) {
+            await TaskTag.destroy({ where: { task_id: task.id } });
+            if (req.body.tags.length > 0) {
+                await TaskTag.bulkCreate(req.body.tags.map(tag => ({ task_id: task.id, tag })));
+            }
+        }
+
+        const fullTask = await Task.findByPk(task.id, {
+            include: [{ model: Tribe, as: 'tribe', attributes: ['id', 'name', 'color'] }],
+        });
+        res.json(await formatTask(fullTask));
     } catch (error) {
         console.error('Update task error:', error);
         res.status(500).json({ message: 'Server error' });
     }
 });
 
-// @route   PATCH /api/tasks/:id/complete
-// @desc    Toggle task completion
-// @access  Private
+// PATCH /api/tasks/:id/complete
 router.patch('/:id/complete', async (req, res) => {
     try {
         if (process.env.USE_MOCK_DATA === 'true') {
-            const taskIndex = mockTasks.findIndex(t => t._id === req.params.id);
-            if (taskIndex === -1) return res.status(404).json({ message: 'Task not found' });
-
-            mockTasks[taskIndex].completed = !mockTasks[taskIndex].completed;
-            if (mockTasks[taskIndex].completed) {
-                mockTasks[taskIndex].status = 'completed';
-                mockTasks[taskIndex].completedAt = new Date().toISOString();
-            } else {
-                mockTasks[taskIndex].status = 'pending';
-                mockTasks[taskIndex].completedAt = null;
-            }
-            return res.json(mockTasks[taskIndex]);
+            const idx = mockTasks.findIndex(t => t._id === req.params.id);
+            if (idx === -1) return res.status(404).json({ message: 'Task not found' });
+            mockTasks[idx].completed = !mockTasks[idx].completed;
+            mockTasks[idx].status = mockTasks[idx].completed ? 'completed' : 'pending';
+            return res.json(mockTasks[idx]);
         }
 
-        const task = await Task.findOne({
-            _id: req.params.id,
-            user: req.user._id,
-        });
-
-        if (!task) {
-            return res.status(404).json({ message: 'Task not found' });
-        }
+        const task = await Task.findOne({ where: { id: req.params.id, userId: req.user.id } });
+        if (!task) return res.status(404).json({ message: 'Task not found' });
 
         task.completed = !task.completed;
         await task.save();
-        await task.populate('tribe', 'name color');
 
-        res.json(task);
+        const fullTask = await Task.findByPk(task.id, {
+            include: [{ model: Tribe, as: 'tribe', attributes: ['id', 'name', 'color'] }],
+        });
+        res.json(await formatTask(fullTask));
     } catch (error) {
         console.error('Toggle complete error:', error);
         res.status(500).json({ message: 'Server error' });
     }
 });
 
-// @route   PATCH /api/tasks/:id/star
-// @desc    Toggle task starred status
-// @access  Private
+// PATCH /api/tasks/:id/star
 router.patch('/:id/star', async (req, res) => {
     try {
         if (process.env.USE_MOCK_DATA === 'true') {
-            const taskIndex = mockTasks.findIndex(t => t._id === req.params.id);
-            if (taskIndex === -1) return res.status(404).json({ message: 'Task not found' });
-
-            mockTasks[taskIndex].starred = !mockTasks[taskIndex].starred;
-            return res.json(mockTasks[taskIndex]);
+            const idx = mockTasks.findIndex(t => t._id === req.params.id);
+            if (idx === -1) return res.status(404).json({ message: 'Task not found' });
+            mockTasks[idx].starred = !mockTasks[idx].starred;
+            return res.json(mockTasks[idx]);
         }
 
-        const task = await Task.findOne({
-            _id: req.params.id,
-            user: req.user._id,
-        });
-
-        if (!task) {
-            return res.status(404).json({ message: 'Task not found' });
-        }
+        const task = await Task.findOne({ where: { id: req.params.id, userId: req.user.id } });
+        if (!task) return res.status(404).json({ message: 'Task not found' });
 
         task.starred = !task.starred;
         await task.save();
-        await task.populate('tribe', 'name color');
 
-        res.json(task);
+        const fullTask = await Task.findByPk(task.id, {
+            include: [{ model: Tribe, as: 'tribe', attributes: ['id', 'name', 'color'] }],
+        });
+        res.json(await formatTask(fullTask));
     } catch (error) {
         console.error('Toggle star error:', error);
         res.status(500).json({ message: 'Server error' });
     }
 });
 
-// @route   DELETE /api/tasks/:id
-// @desc    Delete task
-// @access  Private
+// DELETE /api/tasks/:id
 router.delete('/:id', async (req, res) => {
     try {
         if (process.env.USE_MOCK_DATA === 'true') {
-            const taskIndex = mockTasks.findIndex(t => t._id === req.params.id);
-            if (taskIndex === -1) return res.status(404).json({ message: 'Task not found' });
-
-            mockTasks.splice(taskIndex, 1);
+            const idx = mockTasks.findIndex(t => t._id === req.params.id);
+            if (idx === -1) return res.status(404).json({ message: 'Task not found' });
+            mockTasks.splice(idx, 1);
             return res.json({ message: 'Task deleted successfully' });
         }
 
-        const task = await Task.findOneAndDelete({
-            _id: req.params.id,
-            user: req.user._id,
-        });
-
-        if (!task) {
-            return res.status(404).json({ message: 'Task not found' });
-        }
+        const destroyed = await Task.destroy({ where: { id: req.params.id, userId: req.user.id } });
+        if (!destroyed) return res.status(404).json({ message: 'Task not found' });
 
         res.json({ message: 'Task deleted successfully' });
     } catch (error) {

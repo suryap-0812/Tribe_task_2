@@ -1,102 +1,55 @@
-import mongoose from 'mongoose';
+import { DataTypes } from 'sequelize';
+import sequelize from '../db.js';
 
-const taskSchema = new mongoose.Schema(
-    {
-        title: {
-            type: String,
-            required: [true, 'Task title is required'],
-            trim: true,
-        },
-        description: {
-            type: String,
-            trim: true,
-        },
-        priority: {
-            type: String,
-            enum: ['low', 'medium', 'high'],
-            default: 'medium',
-        },
-        status: {
-            type: String,
-            enum: ['pending', 'in-progress', 'completed'],
-            default: 'pending',
-        },
-        dueDate: {
-            type: Date,
-        },
-        user: {
-            type: mongoose.Schema.Types.ObjectId,
-            ref: 'User',
-            required: true,
-        },
-        tribe: {
-            type: mongoose.Schema.Types.ObjectId,
-            ref: 'Tribe',
-        },
-        completed: {
-            type: Boolean,
-            default: false,
-        },
-        starred: {
-            type: Boolean,
-            default: false,
-        },
-        completedAt: {
-            type: Date,
-        },
-        tags: {
-            type: [String],
-            default: [],
-        },
-        isGroupTask: {
-            type: Boolean,
-            default: false,
-        },
-        assignedRole: {
-            type: String, // 'personal', 'member', 'leader', 'delegate'
-            default: 'personal',
-        },
-        tribeRole: {
-            type: String, // Snapshot of creator's role in tribe
-        }
+const Task = sequelize.define('Task', {
+    id:           { type: DataTypes.INTEGER, autoIncrement: true, primaryKey: true },
+    title:        { type: DataTypes.STRING(255), allowNull: false },
+    description:  { type: DataTypes.TEXT },
+    priority:     {
+        type: DataTypes.STRING(10), defaultValue: 'medium',
+        validate: { isIn: [['low','medium','high']] }
     },
-    {
-        timestamps: true,
-    }
-);
+    status:       {
+        type: DataTypes.STRING(20), defaultValue: 'pending',
+        validate: { isIn: [['pending','in-progress','completed']] }
+    },
+    dueDate:      { type: DataTypes.DATE, field: 'due_date' },
+    userId:       { type: DataTypes.INTEGER, allowNull: false, field: 'user_id' },
+    tribeId:      { type: DataTypes.INTEGER, field: 'tribe_id' },
+    completed:    { type: DataTypes.BOOLEAN, defaultValue: false },
+    starred:      { type: DataTypes.BOOLEAN, defaultValue: false },
+    completedAt:  { type: DataTypes.DATE, field: 'completed_at' },
+    isGroupTask:  { type: DataTypes.BOOLEAN, defaultValue: false, field: 'is_group_task' },
+    assignedRole: { type: DataTypes.STRING(20), defaultValue: 'personal', field: 'assigned_role' },
+    tribeRole:    { type: DataTypes.STRING(50), field: 'tribe_role' },
+}, {
+    tableName: 'tasks',
+    underscored: true,
+    timestamps: true,
+    createdAt: 'created_at',
+    updatedAt: 'updated_at',
+});
 
-// Update completed and completedAt when status changes to completed
-taskSchema.pre('save', function () {
-    if (this.isModified('status')) {
-        if (this.status === 'completed' && !this.completed) {
-            this.completed = true;
-            this.completedAt = new Date();
-        } else if (this.status !== 'completed' && this.completed) {
-            this.completed = false;
-            this.completedAt = null;
+// Sync completed/status logic via hook
+Task.beforeSave((task) => {
+    if (task.changed('status')) {
+        if (task.status === 'completed' && !task.completed) {
+            task.completed = true;
+            task.completedAt = task.completedAt || new Date();
+        } else if (task.status !== 'completed' && task.completed) {
+            task.completed = false;
+            task.completedAt = null;
         }
     }
-
-    if (this.isModified('completed')) {
-        if (this.completed) {
-            this.status = 'completed';
-            if (!this.completedAt) {
-                this.completedAt = new Date();
-            }
+    if (task.changed('completed')) {
+        if (task.completed) {
+            task.status = 'completed';
+            if (!task.completedAt) task.completedAt = new Date();
         } else {
-            if (this.status === 'completed') {
-                this.status = 'pending';
-            }
-            this.completedAt = null;
+            if (task.status === 'completed') task.status = 'pending';
+            task.completedAt = null;
         }
     }
 });
-
-// Index for faster queries
-taskSchema.index({ user: 1, status: 1 });
-taskSchema.index({ user: 1, dueDate: 1 });
-taskSchema.index({ tribe: 1 });
-
-const Task = mongoose.model('Task', taskSchema);
 
 export default Task;
