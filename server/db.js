@@ -11,6 +11,12 @@ const sequelize = new Sequelize(
         dialect: 'postgres',
         logging: process.env.NODE_ENV === 'development' ? false : false,
         pool: { max: 5, min: 0, acquire: 30000, idle: 10000 },
+        dialectOptions: {
+            ssl: {
+                require: true,
+                rejectUnauthorized: false
+            }
+        },
         define: {
             underscored: true,      // map camelCase fields to snake_case columns
             timestamps: true,
