@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import session from 'express-session';
 import pgSession from 'connect-pg-simple';
+import pg from 'pg';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import jwt from 'jsonwebtoken';
@@ -41,7 +42,10 @@ app.use(express.urlencoded({ extended: true }));
 try {
     await sequelize.authenticate();
     console.log('✅ PostgreSQL connected successfully');
-    // Do NOT sync — tables were created manually in Step 1
+    
+    // Sync models to database (creates tables if they don't exist)
+    await sequelize.sync({ alter: true });
+    console.log('📊 Database synchronized successfully');
 } catch (error) {
     console.error('❌ PostgreSQL connection error:', error);
     process.exit(1);
@@ -49,12 +53,17 @@ try {
 
 // Session middleware (PostgreSQL store)
 const PgStore = pgSession(session);
-const connectionString = `postgres://${process.env.DB_USER}:${encodeURIComponent(process.env.DB_PASSWORD || '')}@${process.env.DB_HOST}:${process.env.DB_PORT}/${process.env.DB_NAME}`;
+const dbConnectionString = process.env.DATABASE_URL || `postgres://${process.env.DB_USER}:${encodeURIComponent(process.env.DB_PASSWORD || '')}@${process.env.DB_HOST}:${process.env.DB_PORT}/${process.env.DB_NAME}`;
+
+const pgPool = new pg.Pool({
+    connectionString: dbConnectionString,
+    ssl: { rejectUnauthorized: false }
+});
 
 app.use(
     session({
         store: new PgStore({
-            conString: connectionString,
+            pool: pgPool,
             tableName: 'session',
             createTableIfMissing: true,
         }),

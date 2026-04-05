@@ -1,23 +1,19 @@
 import { Sequelize } from 'sequelize';
 import 'dotenv/config';
 
-const sequelize = new Sequelize(
-    process.env.DB_NAME,
-    process.env.DB_USER,
-    process.env.DB_PASSWORD || null,
-    {
-        host: process.env.DB_HOST || 'localhost',
-        port: parseInt(process.env.DB_PORT) || 5432,
-        dialect: 'postgres',
-        logging: process.env.NODE_ENV === 'development' ? false : false,
-        pool: { max: 5, min: 0, acquire: 30000, idle: 10000 },
-        dialectOptions: {
-            ssl: {
-                require: true,
-                rejectUnauthorized: false
-            }
-        },
-        define: {
+const dbUrl = process.env.DATABASE_URL || `postgres://${process.env.DB_USER}:${process.env.DB_PASSWORD}@${process.env.DB_HOST}:${process.env.DB_PORT}/${process.env.DB_NAME}`;
+
+const sequelize = new Sequelize(dbUrl, {
+    dialect: 'postgres',
+    logging: false,
+    pool: { max: 5, min: 0, acquire: 30000, idle: 10000 },
+    dialectOptions: {
+        ssl: {
+            require: true,
+            rejectUnauthorized: false
+        }
+    },
+    define: {
             underscored: true,      // map camelCase fields to snake_case columns
             timestamps: true,
             createdAt: 'created_at',
