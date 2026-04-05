@@ -53,7 +53,7 @@ try {
 
 // Session middleware (PostgreSQL store)
 const PgStore = pgSession(session);
-const dbConnectionString = process.env.DATABASE_URL || `postgres://${process.env.DB_USER}:${encodeURIComponent(process.env.DB_PASSWORD || '')}@${process.env.DB_HOST}:${process.env.DB_PORT}/${process.env.DB_NAME}`;
+const dbConnectionString = process.env.DATABASE_URL || process.env.DB_URL || `postgres://${process.env.DB_USER}:${encodeURIComponent(process.env.DB_PASSWORD || '')}@${process.env.DB_HOST}:${process.env.DB_PORT}/${process.env.DB_NAME}`;
 
 const pgPool = new pg.Pool({
     connectionString: dbConnectionString,
